@@ -5,7 +5,7 @@ This repository focuses on real-world understanding — not just passing the tes
 
 ---
 
-## 🎯 Goals
+##  Goals
 - Build a strong foundation in Terraform fundamentals.
 - Learn how to manage and secure Terraform state using AWS (S3 + DynamoDB).
 - Understand variables, outputs, and reusable modules in HCL.
@@ -25,7 +25,7 @@ This repository focuses on real-world understanding — not just passing the tes
 
 ---
 
-## 🧠 About This Repo
+##  About This Repo
 This repo serves as both a personal learning record and a resource for others preparing for the Terraform Associate certification.  
 Each section includes concise explanations, CLI commands, and hands-on lab code that mirrors real-world workflows in AWS.
 
@@ -33,7 +33,7 @@ If you find this helpful, feel free to **star** ⭐ the repo or fork it to follo
 
 ---
 
-## 🛠️ Prerequisites
+##  Prerequisites
 - AWS account (for labs)
 - Terraform CLI (v1.5+)
 - AWS CLI (configured credentials)
@@ -41,7 +41,7 @@ If you find this helpful, feel free to **star** ⭐ the repo or fork it to follo
 
 ---
 
-## 👨‍💻 Created by
+##  Created by
 **Rafael Martinez** — Cloud Engineer | AWS & Azure | DevOps | Founder of Terminals&Coffee   
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/rgmartinez-cloud/)
