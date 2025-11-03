@@ -41,52 +41,46 @@ Each section includes concise explanations, CLI commands, and hands-on lab code 
 
 **Recently Enhanced:** Sections 07-13 have been added with comprehensive exam-focused content covering CLI commands, for_each/count comparison, provider configuration, lifecycle blocks, resource targeting/import, Terraform Cloud, and secrets management.
 
-If you find this helpful, feel free to **star** ⭐ the repo or fork it to follow along!
+If you find this helpful, feel free to **star** the repo!
 
 ---
 
-## 📚 Study Path Guide
 
-### For Complete Beginners
+## 📘 Study Path Guide
 
-**Week 1: Foundations**
-1. Start with **00 - Introduction to Terraform** to understand core concepts
-2. Read **01 - State Management** to grasp how Terraform tracks infrastructure
-3. Complete the lab challenge in section 01
+### 🗓️ Week 1 – Foundations
 
-**Week 2: Core Configuration**
-4. Study **02 - Variables & Outputs** for dynamic configurations
-5. Learn **03 - Modules & Backends** for reusable code
-6. Practice creating a module
-
-**Week 3: Advanced Concepts**
-7. Cover **07 - Terraform CLI Commands** (essential for exam!)
-8. Master **08 - for_each vs count** (frequently tested)
-9. Study **09 - Provider Configuration** and **10 - Lifecycle Blocks**
-
-**Week 4: Real-World & Exam Prep**
-10. Review **04 - Advanced Features** (workspaces, data sources)
-11. Read **11 - Resource Targeting & Import**
-12. Study **13 - Secrets Management** for production scenarios
-13. Review **06 - Troubleshooting** to handle common issues
-14. Optional: **05 - Automating AWS Deployments** and **12 - Terraform Cloud**
+1. **00 – Introduction to Terraform** → Understand the workflow, providers, and declarative model.
+2. **01 – State Management** → Learn how Terraform tracks infrastructure and manages drift.
+3. **Lab Challenge:** Complete the exercise in section 01 to observe how state behaves after updates.
 
 ---
 
-### For Experienced Users (Quick Review)
+### 🧩 Week 2 – Core Configuration
 
-**Day 1: Exam-Critical Topics**
-- Sections 07, 08, 09, 10 (CLI, for_each/count, providers, lifecycle)
+4. **02 – Variables & Outputs** → Master input variables and reusable outputs.
+5. **03 – Modules & Backends** → Build modular infrastructure and configure remote state storage.
+6. **Lab Challenge:** Create your own reusable module and push it to GitHub.
 
-**Day 2: Core Concepts**
-- Sections 01, 02, 03 (State, variables, modules)
+---
 
-**Day 3: Advanced & Edge Cases**
-- Sections 04, 06, 11, 13 (Advanced features, troubleshooting, import, secrets)
+### 🚀 Week 3 – Advanced Concepts
 
-**Day 4: Practice & Review**
-- Complete all practice questions
-- Review sections 05, 12 (CI/CD, Terraform Cloud) if needed
+7. **07 – Terraform CLI Commands** → Memorize key commands and flags (high exam weight).
+8. **08 – for_each vs count** → Compare dynamic resource creation patterns.
+9. **09 – Provider Configuration** → Understand provider versions, aliases, and credentials.
+10. **10 – Lifecycle Blocks** → Control resource replacement and dependency order.
+
+---
+
+### 🧠 Week 4 – Real-World & Exam Prep
+
+11. **04 – Advanced Features** → Workspaces, data sources, and built-in functions.
+12. **11 – Resource Targeting & Import** → Practice targeted apply and `terraform import`.
+13. **13 – Secrets Management** → Secure variables, outputs, and state files.
+14. **06 – Troubleshooting** → Debug failed `terraform init` / `apply` runs and common errors.
+15. *(Optional)* **05 – Automating AWS Deployments** → Integrate Terraform into CI/CD pipelines.
+16. *(Optional)* **12 – Terraform Cloud** → Explore remote operations and Sentinel policy checks.
 
 ---
 
