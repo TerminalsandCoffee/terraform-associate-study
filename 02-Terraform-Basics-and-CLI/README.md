@@ -6,6 +6,10 @@
 - Use CLI options to validate configuration and format code.
 - Manage workspace directories and state files with common commands.
 
+## Topics
+- [Terraform CLI Commands](01-terraform-cli-commands.md)
+- [Resource Targeting and Import](02-resource-targeting-and-import.md)
+
 ## Cheat sheet
 - Initialize: `terraform init`
 - Format: `terraform fmt`

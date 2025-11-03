@@ -6,6 +6,11 @@
 - Structure modules with clear input/output contracts using the language syntax.
 - Apply provisioners and meta-arguments responsibly.
 
+## Topics
+- [Variables and Outputs](01-variables-and-outputs.md)
+- [For Each vs Count](02-for-each-vs-count.md)
+- [Lifecycle Blocks](03-lifecycle-blocks.md)
+
 ## Cheat sheet
 - Variable definition: `variable "name" { type = string }`
 - Reference locals: `local.example`

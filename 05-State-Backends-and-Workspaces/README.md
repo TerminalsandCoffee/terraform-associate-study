@@ -6,6 +6,10 @@
 - Manage workspaces for multiple environments or deployments.
 - Protect state with locking and partial configuration strategies.
 
+## Topics
+- [State Management](01-state-management.md)
+- [Advanced Terraform Features](02-advanced-terraform-features.md)
+
 ## Cheat sheet
 - Inspect state: `terraform state list`
 - Move resources: `terraform state mv <source> <destination>`
