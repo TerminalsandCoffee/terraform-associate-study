@@ -6,6 +6,9 @@
 - Apply policy as code to enforce guardrails.
 - Audit Terraform usage and rotate credentials safely.
 
+## Topics
+- [Secrets Management](01-secrets-management.md)
+
 ## Cheat sheet
 - Sensitive variables: `variable "password" { type = string, sensitive = true }`
 - Local file secrets: avoid committing `.tfvars`; use `.gitignore`.
