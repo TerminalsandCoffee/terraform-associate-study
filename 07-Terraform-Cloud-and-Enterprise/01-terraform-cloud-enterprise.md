@@ -1,4 +1,4 @@
-# 12 - Terraform Cloud and Enterprise
+# Terraform Cloud Enterprise
 
 ## Learning Objectives
 - Understand Terraform Cloud features and capabilities.

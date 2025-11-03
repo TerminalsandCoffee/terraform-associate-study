@@ -1,4 +1,4 @@
-# 04 - Advanced Terraform Features
+# Advanced Terraform Features
 
 ## Learning Objectives
 - Understand Terraform workspaces for environment management.

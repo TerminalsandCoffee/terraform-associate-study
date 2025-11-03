@@ -1,4 +1,4 @@
-# 11 - Resource Targeting and Import
+# Resource Targeting And Import
 
 ## Learning Objectives
 - Learn how to target specific resources for Terraform operations.

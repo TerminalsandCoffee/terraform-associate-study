@@ -1,4 +1,4 @@
-# 02 - Variables and Outputs
+# Variables And Outputs
 
 ## Learning Objectives
 - Understand how **variables** make Terraform configurations reusable and dynamic.
