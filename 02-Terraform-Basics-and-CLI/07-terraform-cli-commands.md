@@ -448,33 +448,7 @@ D) `terraform tidy`
 Answer: **B** - `terraform fmt` formats configuration files to a standard style.
 </details>
 
----
-
-### Question 4
-You want to rename a resource in state without recreating it. Which command should you use?
-A) `terraform state rm` then add new resource
-B) `terraform state mv`
-C) `terraform apply` with new name
-D) `terraform refresh`
-
-<details>
-<summary>Show Answer</summary>
-Answer: **B** - `terraform state mv` moves/renames resources in state without touching infrastructure.
-</details>
-
----
-
-### Question 5
-What does `terraform plan -out=tfplan` do?
-A) Saves plan to file for later application
-B) Outputs plan to console
-C) Applies the plan immediately
-D) Validates the configuration
-
-<details>
-<summary>Show Answer</summary>
-Answer: **A** - Saves execution plan to a file. Use `terraform apply tfplan` to apply it later.
-</details>
+(Trimmed to 3 questions for quick review.)
 
 ---
 

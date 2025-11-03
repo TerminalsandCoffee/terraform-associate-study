@@ -540,33 +540,7 @@ D) No lifecycle rule needed
 Answer: **C** - `ignore_changes = [tags]` tells Terraform to ignore tag modifications.
 </details>
 
----
-
-### Question 4
-What happens when you try to destroy a resource with `prevent_destroy = true`?
-A) Resource is destroyed after confirmation
-B) Terraform prompts for confirmation
-C) Terraform shows an error and stops
-D) Resource is removed from state but not destroyed
-
-<details>
-<summary>Show Answer</summary>
-Answer: **C** - Terraform will error and stop, preventing destruction of the protected resource.
-</details>
-
----
-
-### Question 5
-Which lifecycle rule forces a resource to be recreated when another resource changes?
-A) `replace_triggered_by`
-B) `create_before_destroy`
-C) `ignore_changes`
-D) `prevent_destroy`
-
-<details>
-<summary>Show Answer</summary>
-Answer: **A** - `replace_triggered_by` forces replacement when referenced resources change.
-</details>
+(Trimmed to 3 questions for quick review.)
 
 ---
 

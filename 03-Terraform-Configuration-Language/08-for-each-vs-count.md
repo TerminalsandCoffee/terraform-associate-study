@@ -482,33 +482,7 @@ D) Any data type
 Answer: **B** - `for_each` only accepts maps or sets. Lists must be converted using `toset()`.
 </details>
 
----
-
-### Question 4
-You have a map of instance configurations with unique names. Removing one instance should not affect others. Which should you use?
-A) `count`
-B) `for_each`
-C) Both work the same
-D) Neither - use separate resources
-
-<details>
-<summary>Show Answer</summary>
-Answer: **B** - `for_each` is better for maps with unique keys because removing one item doesn't affect others' addresses.
-</details>
-
----
-
-### Question 5
-What is the correct syntax to reference a resource created with `for_each`?
-A) `aws_instance.web[0]`
-B) `aws_instance.web["web-1"]`
-C) `aws_instance.web.web-1`
-D) Both A and B work
-
-<details>
-<summary>Show Answer</summary>
-Answer: **B** - Resources created with `for_each` use map-style addresses: `resource["key"]`. `count` uses index: `resource[0]`.
-</details>
+(Trimmed to 3 questions for quick review.)
 
 ---
 
