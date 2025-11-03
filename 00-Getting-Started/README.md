@@ -5,6 +5,11 @@
 - Review Terraform basics, including workflow and core concepts.
 - Identify key certification resources and study habits.
 
+## Topics
+- [Intro to Terraform](01-intro-to-terraform.md)
+- [Automating AWS Deployments with Terraform](02-automating-aws-deployments-with-terraform.md)
+- [Troubleshooting and Debugging Terraform](03-troubleshooting-and-debugging-terraform.md)
+
 ## Cheat sheet
 - Terraform workflow: `write` ➜ `plan` ➜ `apply`.
 - Core files: `main.tf`, `variables.tf`, `outputs.tf`.

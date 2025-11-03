@@ -6,6 +6,9 @@
 - Manage module versioning and the module registry workflow.
 - Use `depends_on`, `for_each`, and data sources to handle relationships.
 
+## Topics
+- [Modules and Backends](01-modules-and-backends.md)
+
 ## Cheat sheet
 - Call a module:
   ```hcl

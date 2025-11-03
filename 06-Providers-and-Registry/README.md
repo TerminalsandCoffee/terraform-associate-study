@@ -6,6 +6,9 @@
 - Manage provider versions and handle upgrades safely.
 - Use provider-specific resources and data sources effectively.
 
+## Topics
+- [Provider Configuration](01-provider-configuration.md)
+
 ## Cheat sheet
 - Required providers block:
   ```hcl

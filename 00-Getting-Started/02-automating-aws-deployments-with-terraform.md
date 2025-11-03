@@ -1,4 +1,4 @@
-# 05 - Automating AWS Deployments with Terraform
+# Automating AWS Deployments With Terraform
 
 ## Learning Objectives
 - Understand how to integrate Terraform with CI/CD pipelines.

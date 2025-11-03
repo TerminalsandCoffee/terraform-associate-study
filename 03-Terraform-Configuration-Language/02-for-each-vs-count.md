@@ -1,4 +1,4 @@
-# 08 - for_each vs count
+# For Each Vs Count
 
 ## Learning Objectives
 - Understand when to use `for_each` vs `count` to create multiple resource instances.

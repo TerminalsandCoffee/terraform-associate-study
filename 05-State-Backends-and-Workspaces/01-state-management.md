@@ -1,4 +1,4 @@
-# 01 - State Management
+# State Management
 
 ## Learning Objectives
 - Understand what Terraform state is and why it’s critical.
