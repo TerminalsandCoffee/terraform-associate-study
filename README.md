@@ -39,8 +39,6 @@ This repository focuses on real-world understanding — not just passing the tes
 This repo serves as both a personal learning record and a resource for others preparing for the Terraform Associate certification.  
 Each section includes concise explanations, CLI commands, and hands-on lab code that mirrors real-world workflows in AWS.
 
-**Recently Enhanced:** Sections 07-13 have been added with comprehensive exam-focused content covering CLI commands, for_each/count comparison, provider configuration, lifecycle blocks, resource targeting/import, Terraform Cloud, and secrets management.
-
 If you find this helpful, feel free to **star** the repo!
 
 ---
