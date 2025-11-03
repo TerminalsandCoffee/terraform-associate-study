@@ -111,13 +111,12 @@ instance_type  = "t3.micro"
 environment    = "dev"
 ```
 Then apply: 
-'''
+```bash
 terraform apply
 
-or specify custom files:
-
+# or specify custom files:
 terraform apply -var-file=prod.tfvars
-'''
+```
 This keeps configurations clean and environment-specific.
 
 ---
@@ -204,15 +203,11 @@ output "public_ip" {
 }
 ```
 Run: 
+```bash
+terraform apply -var="ami=ami-0123456789abcdef0"
 ```
-terraform apply -var="ami=ami-0c94855ba95c71c99"
-```
-Results: 
-```
-Apply complete! Resources: 1 added.
-Outputs:
-public_ip = "3.94.72.21"
-```
+
+**Note:** AMI IDs in examples are placeholders. In real deployments, use `data "aws_ami"` data sources to fetch the latest AMI IDs.
 ---
 
 ## 10. Best Practices
@@ -228,22 +223,57 @@ public_ip = "3.94.72.21"
 
 ---
 
-## 11. Key Takeaways
+## 11. Practice Questions
+
+### Question 1
+A variable is defined in `terraform.tfvars`, as an environment variable `TF_VAR_region`, and in the variable block with a default value. Which value will Terraform use?
+A) The default value
+B) The value from terraform.tfvars
+C) The environment variable value
+D) Terraform will prompt for input
+
+<details>
+<summary>Show Answer</summary>
+Answer: **C** - Environment variables (TF_VAR_*) have higher precedence than .tfvars files and defaults. Precedence order: CLI flags > .tfvars > environment variables > defaults.
+</details>
+
+---
+
+### Question 2
+What does `sensitive = true` do for a variable?
+A) Encrypts the value in the state file
+B) Prevents the value from being stored in state
+C) Hides the value from CLI output but still stores it in state
+D) Requires the value to be provided via secret manager
+
+<details>
+<summary>Show Answer</summary>
+Answer: **C** - `sensitive = true` redacts the value from Terraform CLI output and logs, but the value is still stored in state. For true security, use external secret management.
+</details>
+
+---
+
+### Question 3
+How do you reference a module's output value in the root module?
+A) `module.<module-name>.<output-name>`
+B) `output.<module-name>.<output-name>`
+C) `var.<module-name>.<output-name>`
+D) `module.<module-name>.output.<output-name>`
+
+<details>
+<summary>Show Answer</summary>
+Answer: **A** - Module outputs are accessed using `module.<module-name>.<output-name>`. For example, `module.vpc.vpc_id` gets the vpc_id output from the vpc module.
+</details>
+
+---
+
+## 12. Key Takeaways
 
 - Variables make Terraform reusable, modular, and environment-friendly.
 - Precedence determines which variable value Terraform uses at runtime.
 - Sensitive variables mask output but still exist in state — protect the state file.
 - Outputs help share data between resources, modules, and users.
 - Together, variables + outputs make your Terraform code maintainable and scalable.
-
-
-
-
-
-
-
-
-
 
 
 

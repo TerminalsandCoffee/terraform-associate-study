@@ -103,7 +103,7 @@ kms_key_id = "arn:aws:kms:us-east-1:123456789012:key/abcd1234-..."
 ```
 ---
 
-## 6.Important Commands
+## 6. Important Commands
 
 | Command                          | Description                                       |
 | -------------------------------- | ------------------------------------------------- |
@@ -133,7 +133,7 @@ provider "aws" {
 }
 
 resource "aws_instance" "web" {
-  ami           = "ami-abc123"
+  ami           = "ami-0123456789abcdef0"  # Example AMI ID - use data source for real deployments
   instance_type = "t2.micro"
   tags = {
     Name = "StateExample"
@@ -156,20 +156,57 @@ output "web_ip" {
 
 ---
 
-## 9. Lab Challenge
+## 9. Practice Questions
+
+### Question 1
+What is the primary purpose of Terraform state?
+A) Store Terraform configuration files
+B) Track the mapping between Terraform resources and real infrastructure
+C) Cache provider plugins
+D) Store variable values
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Terraform state tracks the mapping between resources defined in code and actual infrastructure in the cloud, storing IDs, ARNs, and attributes needed for management.
+</details>
+
+---
+
+### Question 2
+What does DynamoDB provide in an S3 backend configuration?
+A) Stores the state file
+B) Provides state locking to prevent concurrent modifications
+C) Encrypts the state file
+D) Backs up the state file
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - DynamoDB provides state locking, preventing multiple users or processes from modifying state simultaneously, which prevents corruption.
+</details>
+
+---
+
+### Question 3
+Which command should you use to move a resource from one address to another in state without recreating it?
+A) `terraform state rm`
+B) `terraform state mv`
+C) `terraform state push`
+D) `terraform state pull`
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - `terraform state mv` renames or moves resources within state without affecting the actual infrastructure, useful when refactoring code.
+</details>
+
+---
+
+## 10. Lab Challenge
 Create a remote state backend using:
 1. S3 bucket (my-terraform-lab-state)
 2. DynamoDB table (terraform-lock-lab)
 3. A simple EC2 instance
 4. Verify remote state exists with aws s3 ls
-5. Try intentionally applying twice to test locking    
-
-
-
-
-
-
-
+5. Try intentionally applying twice to test locking
 
 
 

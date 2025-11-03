@@ -67,7 +67,7 @@ provider "aws" {
 
 ```hcl
 resource "aws_instance" "example" {
-  ami           = "ami-01b799c439fd5516a"
+  ami           = "ami-0123456789abcdef0"  # Example AMI ID - use data source for real deployments
   instance_type = "t2.micro"
 }
 ```
@@ -109,7 +109,7 @@ variable "instance_type" {
 }
 
 resource "aws_instance" "my_instance" {
-  ami           = "ami-01b799c439fd5516a"
+  ami           = "ami-0123456789abcdef0"  # Example AMI ID - use data source for real deployments
   instance_type = var.instance_type
 }
 ```
@@ -127,10 +127,54 @@ A typical Terraform configuration includes:
 
 ---
 
+## Practice Questions
+
+### Question 1
+What is Infrastructure as Code (IaC)?
+A) Writing infrastructure documentation in code format
+B) Managing infrastructure through configuration files instead of manual processes
+C) Using code to test infrastructure
+D) Converting infrastructure diagrams to code
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - IaC is the practice of managing infrastructure through declarative configuration files that can be versioned, tested, and automated, rather than manual console clicks or scripts.
+</details>
+
+---
+
+### Question 2
+Which Terraform command downloads provider plugins and initializes the backend?
+A) `terraform plan`
+B) `terraform apply`
+C) `terraform init`
+D) `terraform validate`
+
+<details>
+<summary>Show Answer</summary>
+Answer: **C** - `terraform init` initializes the working directory, downloads providers, sets up the backend, and installs modules.
+</details>
+
+---
+
+### Question 3
+What does HCL stand for in Terraform?
+A) HashiCorp Command Language
+B) HashiCorp Configuration Language
+C) HashiCorp Cloud Language
+D) HashiCorp Coding Language
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - HCL stands for HashiCorp Configuration Language, the declarative language used to write Terraform configurations.
+</details>
+
+---
+
 ## Conclusion
 
 Terraform bridges the gap between infrastructure and automation.
 It helps teams move faster, stay consistent, and version everything from compute to networking.
 
-In this repo, you’ll find guided labs and examples — starting simple and progressing toward advanced automation with **workspaces, backends, and CI/CD integration** — all built around real AWS use cases.
+In this repo, you'll find guided labs and examples — starting simple and progressing toward advanced automation with **workspaces, backends, and CI/CD integration** — all built around real AWS use cases.
 

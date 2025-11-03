@@ -1,36 +1,28 @@
-# 05-Automating-AWS-Deployments-with-Terraform.md
+# 05 - Automating AWS Deployments with Terraform
 
-### 1. Storing Terraform State Securely (S3 Backend, DynamoDB Lock)
-
-**Concept:**  
-Terraform state tracks managed resources. For teams, store it remotely in S3 for durability and use DynamoDB for state locking to prevent concurrent operations.
-
-**Example: Backend Configuration**
-
-```hcl
-terraform {
-  backend "s3" {
-    bucket         = "your-terraform-state-bucket"  # e.g., kodekloud-terraform-state-bucket01
-    key            = "path/to/terraform.tfstate"    # e.g., finance/terraform.tfstate
-    region         = "us-east-1"
-    dynamodb_table = "terraform-state-lock"         # Table for locking
-    encrypt        = true                           # Enable server-side encryption
-  }
-}
-```
-
-**Setup Steps:**  
-1. Create S3 bucket with versioning enabled.  
-2. Create DynamoDB table with partition key `LockID` (String).  
-3. Ensure IAM permissions for S3 (Get/Put/List) and DynamoDB (Get/Put/Delete Item).
-
-**Best Practice:**  
-- Enable bucket versioning and encryption.  
-- Use unique keys per project/environment to avoid conflicts.
+## Learning Objectives
+- Understand how to integrate Terraform with CI/CD pipelines.
+- Learn GitHub Actions workflow for Terraform automation.
+- Master OIDC authentication for secure AWS access.
+- Apply best practices for automated infrastructure deployments.
 
 ---
 
-### 2. CI/CD Pipeline Setup with GitHub Actions
+## 1. Storing Terraform State Securely (S3 Backend, DynamoDB Lock)
+
+**Note:** This topic is covered in detail in Section 01 - State Management. This is a quick reference for CI/CD contexts.
+
+For teams, store Terraform state remotely in S3 for durability and use DynamoDB for state locking to prevent concurrent operations.
+
+**Quick Reference:**
+- Create S3 bucket with versioning enabled
+- Create DynamoDB table with partition key `LockID` (String)
+- Configure backend in `terraform` block (see Section 01 for details)
+- Ensure IAM permissions for S3 (Get/Put/List) and DynamoDB (Get/Put/Delete Item)
+
+---
+
+## 2. CI/CD Pipeline Setup with GitHub Actions
 
 **Concept:**  
 Automate Terraform workflows in CI/CD using GitHub Actions. Trigger on push/pull requests for `plan`, and on merge for `apply`. Use OIDC for secure AWS access without long-lived credentials.
@@ -94,7 +86,7 @@ jobs:
 
 ---
 
-### Lab Exercise
+## 3. Lab Exercise
 
 1. Create S3 bucket and DynamoDB table in AWS.  
 2. Configure Terraform backend in your .tf file.  
@@ -105,19 +97,52 @@ jobs:
 
 ---
 
-### Key Takeaways
+## 4. Key Takeaways
 
 - **Secure State:** S3 for storage, DynamoDB for locks prevents corruption.  
 - **Automation:** GitHub Actions for safe, automated deployments.  
 - **Security:** Use OIDC over access keys.
 
-### Practice Question  
+---
+
+## 5. Practice Questions
+
+### Question 1
 What is the purpose of DynamoDB in a Terraform S3 backend?  
 A) Store the state file.  
 B) Provide state locking.  
 C) Encrypt the backend.  
+D) Backup the state file
 
 <details>  
 <summary>Show Answer</summary>  
-Answer: B - DynamoDB handles locking to prevent simultaneous state modifications.  
+Answer: **B** - DynamoDB provides state locking, preventing concurrent modifications that could corrupt state. The state file itself is stored in S3.
+</details>
+
+---
+
+### Question 2
+In a GitHub Actions workflow, what is the recommended method for authenticating to AWS?
+A) Hardcode AWS credentials in the workflow file
+B) Store credentials as GitHub Secrets
+C) Use OIDC to assume an IAM role
+D) Use the AWS CLI default profile
+
+<details>
+<summary>Show Answer</summary>
+Answer: **C** - OIDC (OpenID Connect) allows GitHub Actions to assume AWS IAM roles without storing long-lived credentials. This is more secure than storing access keys as secrets.
+</details>
+
+---
+
+### Question 3
+What should a Terraform CI/CD pipeline do on pull requests?
+A) Run `terraform apply` automatically
+B) Run `terraform plan` to show what would change
+C) Run `terraform destroy` to clean up
+D) Skip Terraform validation
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - On pull requests, run `terraform plan` to preview changes without applying them. Apply should only happen on merge to main/master after review.
 </details>

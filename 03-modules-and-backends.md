@@ -296,6 +296,50 @@ Common backend types and their use cases:
 
 ---
 
+## 14. Practice Questions
+
+### Question 1
+Which module source type would you use to load a module from a Git repository?
+A) `source = "./modules/vpc"`
+B) `source = "git::https://github.com/user/module.git"`
+C) `source = "terraform-aws-modules/vpc/aws"`
+D) `source = "modules/vpc"`
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Git repositories use the `git::` protocol prefix. Option A is a local path, C is the Terraform Registry format, and D is invalid.
+</details>
+
+---
+
+### Question 2
+Can you use variables in the backend configuration block?
+A) Yes, any variable type
+B) Yes, but only string variables
+C) No, backend configuration is static and cannot use variables
+D) Only in certain backends
+
+<details>
+<summary>Show Answer</summary>
+Answer: **C** - Backend configuration blocks cannot use variables, functions, or any expressions. They must be static values. Use `-backend-config` flag or backend config files for dynamic values.
+</details>
+
+---
+
+### Question 3
+What is the purpose of the `required_providers` block in a module?
+A) Configure provider credentials
+B) Declare which providers and versions the module needs
+C) Set provider region
+D) Define provider aliases
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - The `required_providers` block declares provider dependencies and version constraints. It doesn't configure credentials or settings, which are done in provider blocks.
+</details>
+
+---
+
 ## 15. Key Takeaways
 
 * **Modules** group resources and make Terraform reusable, maintainable, and modular.

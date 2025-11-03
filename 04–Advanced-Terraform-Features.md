@@ -1,6 +1,14 @@
-## 04-Advanced-Terraform-Features.md
+# 04 - Advanced Terraform Features
 
-### 1. Workspaces – Managing Multiple Environments
+## Learning Objectives
+- Understand Terraform workspaces for environment management.
+- Learn how to use data sources to query existing infrastructure.
+- Understand provisioners and when to use them.
+- Practice with workspaces, data sources, and provisioners through hands-on examples.
+
+---
+
+## 1. Workspaces – Managing Multiple Environments
 
 **Concept:**  
 Workspaces in Terraform allow you to use the same configuration for multiple environments (like dev, stage, and prod) without duplicating code. Each workspace maintains its own state file, meaning the same config can manage separate resources across different environments.
@@ -31,7 +39,7 @@ Use workspaces for small environment differences. For major variations, use sepa
 
 ---
 
-### 2. Data Sources – Reading Existing Infrastructure
+## 2. Data Sources – Reading Existing Infrastructure
 
 **Concept:**  
 Data sources allow Terraform to query existing resources and reuse their attributes in your configuration. This is helpful when you want to reference infrastructure not managed by your Terraform code.
@@ -52,7 +60,7 @@ data "aws_ami" "ubuntu" {
   owners      = ["099720109477"] # Canonical (Ubuntu)
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-*-amd64-server-*"]
   }
 }
 
@@ -68,7 +76,7 @@ Data sources are read-only and will not alter or destroy the referenced resource
 
 ---
 
-### 3. Provisioners – Running Commands on Resources
+## 3. Provisioners – Running Commands on Resources
 
 **Concept:**  
 Provisioners let you execute scripts or commands after a resource is created. They are often used to perform initial setup tasks such as configuration, file transfers, or installing software.
@@ -119,7 +127,7 @@ Use provisioners sparingly and only when other options (like user_data, cloud-in
 
 ---
 
-### Lab Exercise
+## 4. Lab Exercise
 
 1. Create two workspaces:  
    ```bash
@@ -136,19 +144,52 @@ Use provisioners sparingly and only when other options (like user_data, cloud-in
 
 ---
 
-### Key Takeaways
+## 5. Key Takeaways
 
 - **Workspaces**: Isolate environments with unique state files.  
 - **Data sources**: Read attributes of existing infrastructure.  
 - **Provisioners**: Run setup scripts during resource creation or destruction.
 
-### Practice Question  
+---
+
+## 6. Practice Questions
+
+### Question 1
 What happens if you run `terraform apply` in a new workspace without selecting it first?  
 A) It applies to the default workspace.  
 B) It errors out.  
 C) It creates resources in all workspaces.  
+D) It creates a new workspace automatically
 
 <details>  
 <summary>Show Answer</summary>  
-Answer: A - Terraform always operates in the current workspace; new ones default to "default" until selected.  
+Answer: **A** - Terraform always operates in the current workspace. If you haven't selected a workspace, it uses the "default" workspace. You must use `terraform workspace select` to switch.
+</details>
+
+---
+
+### Question 2
+What is the main difference between a data source and a resource?
+A) Data sources are read-only, resources are managed
+B) Data sources cost money, resources are free
+C) Data sources only work with AWS, resources work everywhere
+D) There is no difference
+
+<details>
+<summary>Show Answer</summary>
+Answer: **A** - Data sources are read-only queries that fetch information about existing infrastructure without managing it. Resources are created, updated, and destroyed by Terraform.
+</details>
+
+---
+
+### Question 3
+When should you use provisioners instead of user_data or cloud-init?
+A) Always - provisioners are the recommended approach
+B) When you need to run commands after resource creation that can't be done with user_data
+C) Never - provisioners are deprecated
+D) Only for Windows instances
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Provisioners should be a last resort. Use user_data, cloud-init, or configuration management tools (Ansible, Chef) first. Provisioners are useful for post-creation tasks that can't be handled by built-in initialization methods.
 </details>
