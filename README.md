@@ -39,3 +39,8 @@ This repository organizes Terraform Associate certification notes, labs, and che
 - Open issues or pull requests with clear descriptions of what changed and why.
 
 Happy studying, and good luck on the Terraform Associate exam!
+
+---
+
+> ☕ Support this project: [https://buymeacoffee.com/terminalsandcoffee](https://buymeacoffee.com/terminalsandcoffee)
+
