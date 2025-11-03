@@ -54,7 +54,7 @@ If you find this helpful, feel free to **star** the repo!
 
 ---
 
-### 🧩 Week 2 – Core Configuration
+### Week 2 – Core Configuration
 
 4. **02 – Variables & Outputs** → Master input variables and reusable outputs.
 5. **03 – Modules & Backends** → Build modular infrastructure and configure remote state storage.
@@ -62,7 +62,7 @@ If you find this helpful, feel free to **star** the repo!
 
 ---
 
-### 🚀 Week 3 – Advanced Concepts
+### Week 3 – Advanced Concepts
 
 7. **07 – Terraform CLI Commands** → Memorize key commands and flags (high exam weight).
 8. **08 – for_each vs count** → Compare dynamic resource creation patterns.
@@ -71,7 +71,7 @@ If you find this helpful, feel free to **star** the repo!
 
 ---
 
-### 🧠 Week 4 – Real-World & Exam Prep
+### Week 4 – Real-World & Exam Prep
 
 11. **04 – Advanced Features** → Workspaces, data sources, and built-in functions.
 12. **11 – Resource Targeting & Import** → Practice targeted apply and `terraform import`.
