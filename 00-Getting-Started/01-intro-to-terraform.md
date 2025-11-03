@@ -1,4 +1,4 @@
-# Intro To Terraform
+# Introduction to Terraform
 
 Terraform is an open-source **Infrastructure as Code (IaC)** tool developed by **HashiCorp**. It lets you define, provision, and manage infrastructure using simple configuration files instead of clicking through cloud consoles.
 
