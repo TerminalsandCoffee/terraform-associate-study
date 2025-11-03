@@ -85,25 +85,25 @@ If you find this helpful, feel free to **star** the repo!
 ### Exam Focus Areas
 
 **Highest Priority (Study First):**
-- ✅ Section 07: CLI Commands (fmt, validate, plan flags, state commands)
-- ✅ Section 08: for_each vs count
-- ✅ Section 09: Provider configuration and version constraints
-- ✅ Section 10: Lifecycle blocks (all 4 rules)
+- Section 07: CLI Commands (fmt, validate, plan flags, state commands)
+- Section 08: for_each vs count
+- Section 09: Provider configuration and version constraints
+- Section 10: Lifecycle blocks (all 4 rules)
 
 **High Priority:**
-- ✅ Section 01: State management and remote backends
-- ✅ Section 02: Variable precedence and sensitive variables
-- ✅ Section 03: Modules and backend configuration
+- Section 01: State management and remote backends
+- Section 02: Variable precedence and sensitive variables
+- Section 03: Modules and backend configuration
 
 **Medium Priority:**
-- ✅ Section 11: Resource targeting and import
-- ✅ Section 04: Workspaces vs Cloud workspaces
-- ✅ Section 13: Secrets management basics
+- Section 11: Resource targeting and import
+- Section 04: Workspaces vs Cloud workspaces
+- Section 13: Secrets management basics
 
 **Lower Priority (Review if time):**
-- ✅ Section 05: CI/CD (helpful for real-world)
-- ✅ Section 12: Terraform Cloud (may have a few questions)
-- ✅ Section 06: Troubleshooting (good for understanding errors)
+- Section 05: CI/CD (helpful for real-world)
+- Section 12: Terraform Cloud (may have a few questions)
+- Section 06: Troubleshooting (good for understanding errors)
 
 ---
 
