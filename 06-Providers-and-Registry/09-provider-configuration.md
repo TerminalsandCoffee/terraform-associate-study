@@ -484,7 +484,33 @@ D) Anywhere in the configuration
 Answer: **B** - `required_providers` must be inside a `terraform` block, typically in `versions.tf` or `provider.tf`.
 </details>
 
-(Trimmed to 3 questions for quick review.)
+---
+
+### Question 4
+What is the default provider source for `hashicorp/aws`?
+A) `hashicorp/aws`
+B) `registry.terraform.io/hashicorp/aws`
+C) `terraform.io/hashicorp/aws`
+D) No default, must specify
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - The full source is `registry.terraform.io/hashicorp/aws`, but you can omit the full path for registry providers and just use `hashicorp/aws`.
+</details>
+
+---
+
+### Question 5
+You need to create resources in multiple AWS regions. What's the best approach?
+A) Multiple provider blocks with different region values
+B) Provider aliases
+C) Use the same provider and change region in each resource
+D) Create separate Terraform configurations
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Use provider aliases to define multiple provider instances (e.g., `aws.us_east`, `aws.us_west`) and reference them with `provider = aws.us_west` in resources.
+</details>
 
 ---
 
