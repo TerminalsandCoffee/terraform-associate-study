@@ -86,5 +86,17 @@ Data source = “go look up this thing that already exists”
 | `main.tf`      | Providers, resources, data sources (the meat)     |
 | `terraform.tfvars` | Actual variable values (or use *.auto.tfvars) |
 
+# Terraform Quick Fire – Can You Answer These Smoothly?
 
+Practice saying each one **out loud** in a single, confident sentence. No stuttering allowed jr 😏
+
+| # | Question                              | Your One-Sentence Answer (say it like you mean it) |
+|---|---------------------------------------|----------------------------------------------------|
+| 1 | **What does `terraform init` do?**    | It initializes the working directory, downloads providers and modules, configures the backend, and creates the `.terraform.lock.hcl` dependency lock file. |
+| 2 | **Why do we need a provider block?**  | Because Terraform core doesn’t natively speak AWS/Azure/GCP — providers are the plugins that translate your HCL into actual API calls. |
+| 3 | **What is a resource vs data source?**| Resources **create or manage** real infrastructure; data sources **read** information about things that already exist. |
+| 4 | **Why do we use outputs?**            | To safely expose important values (ARNs, IPs, URLs, bucket names) from your config or modules so humans and other Terraform configs can use them after `apply`. |
+| 5 | **What is Terraform’s workflow?**     | `init` → `plan` → `apply` → (optional) `destroy` — turning your desired-state code into real cloud resources. |
+
+- If you can say those comfortably? You’ve internalized the fundamentals.
 
