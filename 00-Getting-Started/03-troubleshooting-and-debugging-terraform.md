@@ -1,4 +1,4 @@
-# 06 - Troubleshooting and Debugging Terraform
+# Troubleshooting and Debugging Terraform
 
 ## Learning Objectives
 - Identify common Terraform error categories and their solutions.

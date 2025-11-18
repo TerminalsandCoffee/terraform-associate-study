@@ -1,4 +1,4 @@
-# 13 - Secrets Management in Terraform
+# Secrets Management
 
 ## Learning Objectives
 - Understand best practices for handling secrets in Terraform.

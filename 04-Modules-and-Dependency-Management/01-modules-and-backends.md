@@ -1,4 +1,4 @@
-# 03 - Modules and Backends
+# Modules And Backends
 
 ## Learning Objectives
 - Understand what **modules** are and how they make Terraform configurations reusable.

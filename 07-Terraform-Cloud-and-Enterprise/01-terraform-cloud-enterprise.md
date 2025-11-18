@@ -1,4 +1,4 @@
-# 12 - HCP Terraform (formerly Terraform Cloud) and Enterprise
+# HCP Terraform (formerly Terraform Cloud) and Enterprise
 
 ## Learning Objectives
 - Understand HCP Terraform features and capabilities.

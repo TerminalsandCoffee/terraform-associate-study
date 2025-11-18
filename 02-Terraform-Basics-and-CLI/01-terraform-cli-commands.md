@@ -1,4 +1,4 @@
-# 07 - Terraform CLI Commands
+# Terraform CLI Commands
 
 ## Learning Objectives
 - Master essential Terraform CLI commands for the exam.

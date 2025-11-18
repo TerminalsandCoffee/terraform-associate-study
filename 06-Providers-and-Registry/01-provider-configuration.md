@@ -1,4 +1,4 @@
-# 09 - Provider Configuration
+# Provider Configuration
 
 ## Learning Objectives
 - Understand how to configure Terraform providers.

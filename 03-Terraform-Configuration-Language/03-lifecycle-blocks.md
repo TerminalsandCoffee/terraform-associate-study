@@ -1,4 +1,4 @@
-# 10 - Lifecycle Blocks
+# Lifecycle Blocks
 
 ## Learning Objectives
 - Understand all Terraform lifecycle meta-arguments and when to use each.
