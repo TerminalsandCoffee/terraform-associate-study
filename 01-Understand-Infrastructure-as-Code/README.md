@@ -15,10 +15,15 @@
 - [Terraform Recommended Practices](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/infrastructure-as-code)
 - [Version Control Best Practices](https://developer.hashicorp.com/terraform/cloud-docs/vcs)
 
-## Hands-on task
-Create a short README summarizing how IaC improves your team's workflows. Then initialize a Git repository:
+## The Terraform File Structure
+You need to know the anatomy of a normal project:
 ```bash
-git init
-git add README.md
-git commit -m "Document IaC benefits"
+main.tf         # providers + resources
+variables.tf    # input variables
+outputs.tf      # outputs
+terraform.tfvars # values for input variables
 ```
+
+## Memory Trick: 
+- MVO = main, variables, outputs
+- Terraform sees all .tf files as one big file
