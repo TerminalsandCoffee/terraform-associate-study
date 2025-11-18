@@ -186,10 +186,10 @@ Answer: **A** - Data sources are read-only queries that fetch information about 
 When should you use provisioners instead of user_data or cloud-init?
 A) Always - provisioners are the recommended approach
 B) When you need to run commands after resource creation that can't be done with user_data
-C) Never - provisioners are deprecated
+C) Never - provisioners should never be used
 D) Only for Windows instances
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Provisioners should be a last resort. Use user_data, cloud-init, or configuration management tools (Ansible, Chef) first. Provisioners are useful for post-creation tasks that can't be handled by built-in initialization methods.
+Answer: **B** - Provisioners should be a last resort. Use user_data, cloud-init, or configuration management tools (Ansible, Chef) first. Provisioners are useful for post-creation tasks that can't be handled by built-in initialization methods. While not deprecated, they are discouraged in favor of more reliable alternatives.
 </details>

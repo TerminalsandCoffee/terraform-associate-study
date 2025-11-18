@@ -2,6 +2,7 @@
 
 ## Learning Objectives
 - Understand all Terraform lifecycle meta-arguments and when to use each.
+- Learn how to use `depends_on` for explicit dependency management.
 - Learn how to prevent accidental resource destruction.
 - Master `create_before_destroy` for zero-downtime updates.
 - Control resource replacement behavior with lifecycle rules.
@@ -35,9 +36,418 @@ Terraform provides four lifecycle rules:
 3. **`ignore_changes`** - Ignores changes to specific attributes
 4. **`replace_triggered_by`** - Forces replacement when referenced resources change
 
+Additionally, Terraform provides the **`depends_on`** meta-argument for explicit dependency management, which is closely related to lifecycle management.
+
 ---
 
-## 3. `prevent_destroy`
+## 3. `depends_on` - Explicit Dependencies
+
+### Purpose
+
+The `depends_on` meta-argument creates **explicit dependencies** between resources when Terraform cannot automatically infer the dependency from resource references. It ensures resources are created, updated, or destroyed in the correct order.
+
+### Implicit vs Explicit Dependencies
+
+**Implicit Dependencies** (automatic):
+```hcl
+resource "aws_security_group" "web" {
+  name = "web-sg"
+}
+
+resource "aws_instance" "web" {
+  ami                    = var.ami_id
+  instance_type          = "t3.micro"
+  vpc_security_group_ids = [aws_security_group.web.id]  # Implicit dependency
+  # Terraform knows: security group must be created before instance
+}
+```
+
+**Explicit Dependencies** (using `depends_on`):
+```hcl
+resource "aws_iam_role" "lambda" {
+  name = "lambda-role"
+}
+
+resource "aws_lambda_function" "example" {
+  filename      = "lambda.zip"
+  function_name = "example"
+  role          = aws_iam_role.lambda.arn
+  
+  depends_on = [
+    aws_iam_role.lambda,  # Explicit dependency (even though we reference it)
+    aws_cloudwatch_log_group.lambda  # Explicit dependency (no reference)
+  ]
+}
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/example"
+  retention_in_days = 7
+}
+```
+
+### When to Use `depends_on`
+
+Use `depends_on` when:
+
+1. **No direct reference exists:**
+   ```hcl
+   # Resource A must exist before Resource B, but B doesn't reference A
+   resource "aws_s3_bucket" "data" {
+     bucket = "my-data-bucket"
+   }
+   
+   resource "aws_instance" "processor" {
+     ami           = var.ami_id
+     instance_type = "t3.micro"
+     
+     # Instance needs S3 bucket to exist first, but doesn't reference it
+     depends_on = [aws_s3_bucket.data]
+   }
+   ```
+
+2. **Side effects or external dependencies:**
+   ```hcl
+   # Lambda function needs IAM role to be fully propagated
+   resource "aws_iam_role" "lambda" {
+     name = "lambda-role"
+   }
+   
+   resource "aws_lambda_function" "example" {
+     filename      = "lambda.zip"
+     function_name = "example"
+     role          = aws_iam_role.lambda.arn
+     
+     # Wait for IAM role propagation
+     depends_on = [aws_iam_role.lambda]
+   }
+   ```
+
+3. **Multiple resources must be ready:**
+   ```hcl
+   resource "aws_vpc" "main" {
+     cidr_block = "10.0.0.0/16"
+   }
+   
+   resource "aws_subnet" "public" {
+     vpc_id = aws_vpc.main.id
+   }
+   
+   resource "aws_internet_gateway" "main" {
+     vpc_id = aws_vpc.main.id
+   }
+   
+   resource "aws_route_table" "public" {
+     vpc_id = aws_vpc.main.id
+     
+     depends_on = [
+       aws_subnet.public,
+       aws_internet_gateway.main
+     ]
+   }
+   ```
+
+### Syntax
+
+```hcl
+resource "aws_instance" "web" {
+  ami           = var.ami_id
+  instance_type = "t3.micro"
+  
+  depends_on = [
+    aws_security_group.web,
+    aws_s3_bucket.data
+  ]
+}
+```
+
+### Common Use Cases
+
+#### Use Case 1: IAM Role Propagation
+
+```hcl
+resource "aws_iam_role" "lambda" {
+  name = "lambda-execution-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "example" {
+  filename      = "lambda.zip"
+  function_name = "example"
+  role          = aws_iam_role.lambda.arn
+  
+  # Wait for IAM role and policy attachment to propagate
+  depends_on = [
+    aws_iam_role.lambda,
+    aws_iam_role_policy_attachment.lambda
+  ]
+}
+```
+
+#### Use Case 2: VPC and Networking Setup
+
+```hcl
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+
+resource "aws_subnet" "private" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.2.0/24"
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_nat_gateway" "main" {
+  subnet_id     = aws_subnet.public.id
+  allocation_id = aws_eip.nat.id
+  
+  depends_on = [aws_internet_gateway.main]
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main.id
+  }
+  
+  depends_on = [
+    aws_nat_gateway.main,
+    aws_subnet.private
+  ]
+}
+```
+
+#### Use Case 3: Module Dependencies
+
+```hcl
+module "network" {
+  source = "./modules/network"
+  cidr_block = "10.0.0.0/16"
+}
+
+module "security" {
+  source = "./modules/security"
+  vpc_id = module.network.vpc_id
+}
+
+module "compute" {
+  source = "./modules/compute"
+  vpc_id = module.network.vpc_id
+  
+  # Compute depends on both network and security modules
+  depends_on = [
+    module.network,
+    module.security
+  ]
+}
+```
+
+#### Use Case 4: Data Source Dependencies
+
+```hcl
+resource "aws_s3_bucket" "data" {
+  bucket = "my-data-bucket"
+}
+
+resource "aws_s3_bucket_versioning" "data" {
+  bucket = aws_s3_bucket.data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Data source needs bucket and versioning to be ready
+data "aws_s3_bucket" "data" {
+  bucket = aws_s3_bucket.data.id
+  
+  depends_on = [
+    aws_s3_bucket.data,
+    aws_s3_bucket_versioning.data
+  ]
+}
+
+resource "aws_instance" "processor" {
+  ami           = var.ami_id
+  instance_type = "t3.micro"
+  
+  user_data = <<-EOF
+    # Use S3 bucket: ${data.aws_s3_bucket.data.id}
+  EOF
+  
+  depends_on = [data.aws_s3_bucket.data]
+}
+```
+
+### Important Notes
+
+1. **`depends_on` affects order, not relationships:**
+   - It only controls creation/destruction order
+   - It doesn't create a data dependency
+   - Resources can still reference each other without `depends_on` if there's a direct reference
+
+2. **Use sparingly:**
+   - Terraform usually infers dependencies automatically
+   - Only use when automatic inference isn't sufficient
+   - Overuse can make configurations harder to understand
+
+3. **Works with modules:**
+   ```hcl
+   module "app" {
+     source = "./modules/app"
+     
+     depends_on = [
+       module.database,
+       module.cache
+     ]
+   }
+   ```
+
+4. **Works with data sources:**
+   ```hcl
+   data "aws_ami" "latest" {
+     most_recent = true
+     owners      = ["amazon"]
+   }
+   
+   resource "aws_instance" "web" {
+     ami = data.aws_ami.latest.id
+     
+     depends_on = [data.aws_ami.latest]
+   }
+   ```
+
+### Combining `depends_on` with Lifecycle Rules
+
+```hcl
+resource "aws_db_instance" "main" {
+  identifier     = "prod-database"
+  engine         = "mysql"
+  instance_class = "db.t3.medium"
+  
+  depends_on = [
+    aws_security_group.db,
+    aws_subnet.private
+  ]
+  
+  lifecycle {
+    prevent_destroy = true
+    create_before_destroy = false
+  }
+}
+```
+
+### Real-World Example: Complete Dependency Chain
+
+```hcl
+# 1. VPC (no dependencies)
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+# 2. Subnets (depend on VPC)
+resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+
+resource "aws_subnet" "private" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.2.0/24"
+}
+
+# 3. Internet Gateway (depends on VPC)
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+# 4. NAT Gateway (depends on public subnet and IGW)
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  
+  depends_on = [aws_internet_gateway.main]
+}
+
+resource "aws_nat_gateway" "main" {
+  subnet_id     = aws_subnet.public.id
+  allocation_id = aws_eip.nat.id
+  
+  depends_on = [
+    aws_subnet.public,
+    aws_eip.nat,
+    aws_internet_gateway.main
+  ]
+}
+
+# 5. Route Tables (depend on gateways and subnets)
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+  
+  depends_on = [
+    aws_internet_gateway.main,
+    aws_subnet.public
+  ]
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main.id
+  }
+  
+  depends_on = [
+    aws_nat_gateway.main,
+    aws_subnet.private
+  ]
+}
+
+# 6. Instances (depend on all networking)
+resource "aws_instance" "web" {
+  ami           = var.ami_id
+  instance_type = "t3.micro"
+  subnet_id     = aws_subnet.public.id
+  
+  depends_on = [
+    aws_subnet.public,
+    aws_route_table.public,
+    aws_internet_gateway.main
+  ]
+}
+```
+
+---
+
+## 4. `prevent_destroy`
 
 ### Purpose
 Prevents Terraform from destroying the resource, even when running `terraform destroy` or when the resource is removed from configuration.
@@ -101,7 +511,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
 
 ---
 
-## 4. `create_before_destroy`
+## 5. `create_before_destroy`
 
 ### Purpose
 Creates the new resource **before** destroying the old one. Essential for zero-downtime updates.
@@ -189,7 +599,7 @@ resource "aws_autoscaling_group" "web" {
 
 ---
 
-## 5. `ignore_changes`
+## 6. `ignore_changes`
 
 ### Purpose
 Tells Terraform to ignore changes to specific attributes during `terraform plan` and `terraform apply`.
@@ -300,7 +710,7 @@ resource "aws_instance" "web" {
 
 ---
 
-## 6. `replace_triggered_by`
+## 7. `replace_triggered_by`
 
 ### Purpose
 Forces resource replacement when referenced resources or their attributes change.
@@ -383,7 +793,7 @@ resource "aws_instance" "web" {
 
 ---
 
-## 7. Combining Lifecycle Rules
+## 8. Combining Lifecycle Rules
 
 You can use multiple lifecycle rules together:
 
@@ -431,7 +841,7 @@ resource "aws_instance" "web" {
 
 ---
 
-## 8. Real-World Examples
+## 9. Real-World Examples
 
 ### Example 1: Production Database
 
@@ -498,7 +908,7 @@ resource "aws_instance" "web" {
 
 ---
 
-## 9. Exam-Style Practice Questions
+## 10. Exam-Style Practice Questions
 
 ### Question 1
 Which lifecycle rule prevents Terraform from destroying a resource?
@@ -570,7 +980,35 @@ Answer: **A** - `replace_triggered_by` forces replacement when referenced resour
 
 ---
 
-## 10. Decision Guide
+### Question 6
+When should you use `depends_on`?
+A) Always, to ensure correct resource ordering
+B) Only when Terraform cannot automatically infer dependencies
+C) Never, Terraform always infers dependencies correctly
+D) Only for data sources
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Use `depends_on` when Terraform cannot automatically infer dependencies from resource references, such as when resources must be created in order but don't directly reference each other.
+</details>
+
+---
+
+### Question 7
+What is the difference between implicit and explicit dependencies?
+A) Implicit dependencies use `depends_on`, explicit don't
+B) Explicit dependencies use `depends_on`, implicit are inferred from references
+C) There is no difference
+D) Implicit dependencies are faster
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Explicit dependencies use the `depends_on` meta-argument. Implicit dependencies are automatically inferred by Terraform when one resource references another (e.g., `vpc_id = aws_vpc.main.id`).
+</details>
+
+---
+
+## 11. Decision Guide
 
 **When to use `prevent_destroy`:**
 - Critical resources (databases, state buckets)
@@ -592,10 +1030,17 @@ Answer: **A** - `replace_triggered_by` forces replacement when referenced resour
 - Launch template updates should recreate instances
 - Configuration changes require full replacement
 
+**When to use `depends_on`:**
+- Resources must be created in order but don't reference each other
+- Side effects or external dependencies (IAM propagation, etc.)
+- Multiple resources must be ready before another can be created
+- Data sources need resources to exist first
+
 ---
 
-## 11. Key Takeaways
+## 12. Key Takeaways
 
+- **`depends_on`**: Creates explicit dependencies when Terraform cannot infer them automatically. Use when resources must be created in a specific order but don't directly reference each other.
 - **`prevent_destroy`**: Protects resources from accidental destruction. Must be removed before destroying.
 - **`create_before_destroy`**: Creates new resource before destroying old (zero-downtime updates). Watch for name conflicts.
 - **`ignore_changes`**: Tells Terraform to ignore changes to specific attributes (useful for external modifications).
@@ -603,11 +1048,13 @@ Answer: **A** - `replace_triggered_by` forces replacement when referenced resour
 - **All rules can be combined** in a single `lifecycle` block.
 - **`prevent_destroy` takes precedence** - even `terraform destroy -target` will fail.
 - **Use lifecycle rules judiciously** - they can mask configuration drift and cause unexpected behavior.
+- **Implicit vs Explicit**: Terraform usually infers dependencies automatically. Use `depends_on` only when necessary.
 
 ---
 
 ## References
 
 - [Terraform Lifecycle Meta-Arguments](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle)
+- [Terraform depends_on Meta-Argument](https://developer.hashicorp.com/terraform/language/meta-arguments/depends_on)
 - [Resource Behavior](https://developer.hashicorp.com/terraform/language/resources/behavior)
 

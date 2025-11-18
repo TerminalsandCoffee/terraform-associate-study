@@ -106,7 +106,7 @@ version = "~> 5.25"   # Allows 5.25.0, 5.25.1, but NOT 5.26.0 or 6.0.0
 
 ```hcl
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.12"
   
   required_providers {
     aws = {
@@ -551,7 +551,7 @@ resource "aws_s3_bucket" "backup" {
 
 ```hcl
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.12"
   
   required_providers {
     aws = {

@@ -1,44 +1,49 @@
-# 12 - Terraform Cloud and Enterprise
+# 12 - HCP Terraform (formerly Terraform Cloud) and Enterprise
 
 ## Learning Objectives
-- Understand Terraform Cloud features and capabilities.
-- Learn the difference between Terraform Cloud workspaces and CLI workspaces.
+- Understand HCP Terraform features and capabilities.
+- Learn the difference between HCP Terraform workspaces and CLI workspaces.
+- Understand Projects for organizing workspaces.
 - Understand Policy as Code with Sentinel.
 - Explore private module registry and VCS integration.
 
 ---
 
-## 1. Overview of Terraform Cloud/Enterprise
+## 1. Overview of HCP Terraform/Enterprise
 
-### What is Terraform Cloud?
+### What is HCP Terraform?
 
-**Terraform Cloud** is HashiCorp's managed service for Terraform workflows:
+**HCP Terraform** (formerly Terraform Cloud) is HashiCorp's managed service for Terraform workflows:
 - Remote state storage
 - Remote execution (runs)
 - Workspace management
+- Projects for organizing workspaces
 - Team collaboration
 - Policy as Code (Sentinel)
 - Private module registry
 - VCS integration (GitHub, GitLab, etc.)
 
-**Terraform Enterprise** is the self-hosted version with the same features, deployed in your infrastructure.
+**HCP Terraform Enterprise** (formerly Terraform Enterprise) is the self-hosted version with the same features, deployed in your infrastructure.
+
+**Note:** HCP Terraform is the new name for Terraform Cloud. The functionality remains the same, but the branding has been updated to align with HashiCorp Cloud Platform (HCP).
 
 ### Key Differences from CLI
 
-| Feature | Terraform CLI | Terraform Cloud |
+| Feature | Terraform CLI | HCP Terraform |
 |---------|---------------|-----------------|
 | **State Storage** | Local file or S3/GCS backend | Managed remote state |
 | **Execution** | Local machine | Remote runners |
-| **Workspaces** | Local workspaces | Cloud workspaces (different concept) |
+| **Workspaces** | Local workspaces | HCP Terraform workspaces (different concept) |
+| **Organization** | Manual | Projects for grouping workspaces |
 | **Collaboration** | Manual (S3 + locking) | Built-in team features |
 | **Policy** | Manual review | Automated Sentinel policies |
 | **Modules** | Terraform Registry | Private registry + public |
 
 ---
 
-## 2. Terraform Cloud Workspaces
+## 2. HCP Terraform Workspaces
 
-### Cloud Workspaces vs CLI Workspaces
+### HCP Terraform Workspaces vs CLI Workspaces
 
 **Important:** These are **different concepts**!
 
@@ -51,13 +56,14 @@ terraform workspace select dev
 - Used for environment separation
 - Local or remote backend
 
-#### Terraform Cloud Workspaces
+#### HCP Terraform Workspaces
 - Separate configuration per workspace
 - Independent state files
 - Separate variables and settings
 - Managed through UI or API
+- Organized into Projects
 
-### Cloud Workspace Features
+### HCP Terraform Workspace Features
 
 **1. Remote State:**
 - Automatic state storage
@@ -84,11 +90,12 @@ terraform workspace select dev
 
 ### Workspace Configuration Example
 
-**Terraform Cloud UI:**
+**HCP Terraform UI:**
 1. Create workspace
 2. Connect VCS (GitHub/GitLab)
 3. Set workspace variables
 4. Configure run triggers
+5. Assign to a Project (optional)
 
 **Or via API:**
 ```hcl
@@ -103,28 +110,121 @@ terraform {
 }
 ```
 
-**Note:** In Cloud workspaces, you don't define backend blocks - Terraform Cloud handles state automatically.
+**Note:** In HCP Terraform workspaces, you don't define backend blocks - HCP Terraform handles state automatically.
 
 ---
 
-## 3. Remote Execution (Runs)
+## 3. Projects
+
+### What are Projects?
+
+**Projects** are an organizational feature in HCP Terraform that allow you to group and manage related workspaces together. Projects provide:
+
+- **Organization**: Group workspaces by team, application, or environment
+- **Access Control**: Apply team permissions at the project level
+- **Policy Sets**: Assign Sentinel policies to projects
+- **Cost Management**: Track costs across project workspaces
+- **Visual Organization**: Better workspace management in the UI
+
+### Project Structure
+
+```
+Organization: my-company
+├── Project: Production
+│   ├── Workspace: prod-web
+│   ├── Workspace: prod-database
+│   └── Workspace: prod-cache
+├── Project: Development
+│   ├── Workspace: dev-web
+│   └── Workspace: dev-database
+└── Project: Shared Services
+    ├── Workspace: networking
+    └── Workspace: security
+```
+
+### Creating Projects
+
+**Via UI:**
+1. Navigate to Projects in HCP Terraform
+2. Click "Create Project"
+3. Name the project (e.g., "Production", "Development")
+4. Add description (optional)
+5. Assign workspaces to the project
+
+**Via API:**
+```bash
+curl \
+  --header "Authorization: Bearer $TOKEN" \
+  --header "Content-Type: application/vnd.api+json" \
+  --request POST \
+  --data @payload.json \
+  https://app.terraform.io/api/v2/organizations/my-org/projects
+```
+
+### Project Features
+
+**1. Team Access:**
+- Assign teams to projects
+- Control workspace access at project level
+- Inherit permissions to child workspaces
+
+**2. Policy Sets:**
+- Assign Sentinel policy sets to projects
+- All workspaces in project inherit policies
+- Override at workspace level if needed
+
+**3. Cost Tracking:**
+- View cost estimates across project workspaces
+- Track spending by project
+- Budget alerts per project
+
+**4. Workspace Organization:**
+- Filter workspaces by project
+- Group related infrastructure
+- Better visibility and management
+
+### Example: Project-Based Organization
+
+```hcl
+# Workspace configuration for a project
+terraform {
+  cloud {
+    organization = "my-org"
+    
+    workspaces {
+      tags = ["production", "web"]
+      # Workspace will be in "Production" project
+    }
+  }
+}
+```
+
+**Best Practices:**
+- Organize by environment (Production, Staging, Development)
+- Group by application or service
+- Use consistent naming conventions
+- Apply policies at project level when possible
+
+---
+
+## 4. Remote Execution (Runs)
 
 ### How Runs Work
 
-**Run** = A single execution of `terraform plan` or `terraform apply` in Terraform Cloud.
+**Run** = A single execution of `terraform plan` or `terraform apply` in HCP Terraform.
 
 **Types of runs:**
 1. **VCS-driven:** Triggered by commits to connected repository
 2. **API-triggered:** Created via API
-3. **UI-triggered:** Manual runs from Terraform Cloud UI
-4. **CLI-driven:** `terraform plan/apply` queued to Cloud (if configured)
+3. **UI-triggered:** Manual runs from HCP Terraform UI
+4. **CLI-driven:** `terraform plan/apply` queued to HCP Terraform (if configured)
 
 ### Run Workflow
 
 ```
 1. Commit to GitHub
    ↓
-2. Terraform Cloud detects change
+2. HCP Terraform detects change
    ↓
 3. Creates new run
    ↓
@@ -157,11 +257,11 @@ terraform {
 
 ---
 
-## 4. Policy as Code with Sentinel
+## 5. Policy as Code with Sentinel
 
 ### What is Sentinel?
 
-**Sentinel** is HashiCorp's Policy as Code framework that enforces policies on Terraform runs.
+**Sentinel** is HashiCorp's Policy as Code framework that enforces policies on Terraform runs in HCP Terraform.
 
 **Policy types:**
 - **Hard mandatory:** Blocks run if violated
@@ -231,13 +331,13 @@ Policies are evaluated:
 ### Policy Sets
 
 **Policy sets** group policies and assign them to:
-- Organizations
-- Workspaces
-- Projects
+- Organizations (all workspaces)
+- Projects (all workspaces in project)
+- Workspaces (specific workspaces)
 
 ---
 
-## 5. Private Module Registry
+## 6. Private Module Registry
 
 ### What is the Private Module Registry?
 
@@ -251,7 +351,7 @@ Allows organizations to:
 
 **Via UI:**
 1. Connect VCS repository
-2. Terraform Cloud detects modules
+2. HCP Terraform detects modules
 3. Auto-publishes on tags/releases
 
 **Module structure:**
@@ -265,7 +365,7 @@ terraform-aws-vpc/
 
 **Versioning:**
 - Tag in Git: `v1.0.0`
-- Terraform Cloud creates module version
+- HCP Terraform creates module version
 
 ### Using Private Modules
 
@@ -285,7 +385,7 @@ module "vpc" {
 
 ---
 
-## 6. VCS Integration
+## 7. VCS Integration
 
 ### Supported VCS Providers
 
@@ -325,11 +425,11 @@ module "vpc" {
 
 ---
 
-## 7. Cost Estimation
+## 8. Cost Estimation
 
 ### What is Cost Estimation?
 
-Terraform Cloud can estimate infrastructure costs for planned changes.
+HCP Terraform can estimate infrastructure costs for planned changes.
 
 **Shows:**
 - Monthly cost for new resources
@@ -342,7 +442,7 @@ Terraform Cloud can estimate infrastructure costs for planned changes.
 
 ---
 
-## 8. Team Collaboration Features
+## 9. Team Collaboration Features
 
 ### Features
 
@@ -369,10 +469,10 @@ Terraform Cloud can estimate infrastructure costs for planned changes.
 
 ---
 
-## 9. Practice Questions
+## 10. Practice Questions
 
 ### Question 1
-What is the main difference between Terraform CLI workspaces and Terraform Cloud workspaces?
+What is the main difference between Terraform CLI workspaces and HCP Terraform workspaces?
 A) They are the same concept
 B) CLI workspaces are for environments, Cloud workspaces are separate configurations
 C) Cloud workspaces don't support state
@@ -380,13 +480,13 @@ D) CLI workspaces are cloud-based
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - CLI workspaces use multiple state files for the same configuration (environment separation). Cloud workspaces are separate configurations, each with their own state, variables, and settings.
+Answer: **B** - CLI workspaces use multiple state files for the same configuration (environment separation). HCP Terraform workspaces are separate configurations, each with their own state, variables, and settings.
 </details>
 
 ---
 
 ### Question 2
-What is Sentinel used for in Terraform Cloud?
+What is Sentinel used for in HCP Terraform?
 A) Managing state files
 B) Executing Terraform runs
 C) Policy as Code - enforcing rules on Terraform plans
@@ -400,7 +500,7 @@ Answer: **C** - Sentinel is the Policy as Code framework that enforces policies 
 ---
 
 ### Question 3
-How do you reference a private module from Terraform Cloud's registry?
+How do you reference a private module from HCP Terraform's registry?
 A) `source = "./modules/vpc"`
 B) `source = "app.terraform.io/org/vpc/aws"`
 C) `source = "hashicorp/vpc/aws"`
@@ -411,12 +511,25 @@ D) `source = "git::https://github.com/org/vpc"`
 Answer: **B** - Private modules use the format `app.terraform.io/<ORGANIZATION>/<MODULE-NAME>/<PROVIDER>`. Option C is the public registry format.
 </details>
 
+### Question 4
+What are Projects used for in HCP Terraform?
+A) Storing Terraform state files
+B) Organizing and grouping related workspaces
+C) Executing Terraform runs
+D) Managing provider versions
+
+<details>
+<summary>Show Answer</summary>
+Answer: **B** - Projects are used to organize and group related workspaces together, providing better management, access control, and policy assignment at the project level.
+</details>
+
 ---
 
-## 10. Key Takeaways
+## 11. Key Takeaways
 
-- **Terraform Cloud** provides managed remote state, remote execution, and collaboration features.
-- **Cloud workspaces** are different from CLI workspaces - they're separate configurations, not environment variants.
+- **HCP Terraform** (formerly Terraform Cloud) provides managed remote state, remote execution, and collaboration features.
+- **HCP Terraform workspaces** are different from CLI workspaces - they're separate configurations, not environment variants.
+- **Projects** organize workspaces into logical groups for better management, access control, and policy assignment.
 - **Sentinel** enforces Policy as Code, blocking or warning on policy violations.
 - **Private Module Registry** allows organizations to publish and version internal modules.
 - **VCS Integration** enables automatic runs on commits and pull requests.
@@ -427,7 +540,8 @@ Answer: **B** - Private modules use the format `app.terraform.io/<ORGANIZATION>/
 
 ## References
 
-- [Terraform Cloud Documentation](https://developer.hashicorp.com/terraform/cloud-docs)
+- [HCP Terraform Documentation](https://developer.hashicorp.com/terraform/cloud-docs)
+- [HCP Terraform Projects](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/projects)
 - [Sentinel Language](https://docs.hashicorp.com/sentinel/language/)
 - [Private Module Registry](https://developer.hashicorp.com/terraform/cloud-docs/registry)
 - [VCS-driven Workflow](https://developer.hashicorp.com/terraform/cloud-docs/run/ui)
