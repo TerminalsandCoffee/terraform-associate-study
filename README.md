@@ -2,6 +2,8 @@
 
 This repository organizes Terraform Associate certification notes, labs, and checklists into themed learning domains. Each folder contains focused reading material, cheat sheets, and small practice tasks so you can build confidence one topic at a time.
 
+I will be continously updating as I revist the fundamentals of terraform. 
+
 ## Table of Contents
 - [00 – Getting Started](00-Getting-Started/) — orientation, study tips, and foundational commands.
   - [Intro to Terraform](00-Getting-Started/01-intro-to-terraform.md)
