@@ -170,7 +170,7 @@ Error: Reference to undeclared input variable
 **Example:**
 ```bash
 terraform version
-Terraform v1.6.0
+Terraform v1.12.0
 on windows_amd64
 + provider registry.terraform.io/hashicorp/aws v5.25.0
 ```
