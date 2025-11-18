@@ -94,32 +94,17 @@ This study guide has been updated to align with **Exam 004** and Terraform 1.12.
 15. Review [Troubleshooting](00-Getting-Started/03-troubleshooting-and-debugging-terraform.md) to handle common issues
 16. Optional: [Automating AWS Deployments](00-Getting-Started/02-automating-aws-deployments-with-terraform.md) and [HCP Terraform](07-Terraform-Cloud-and-Enterprise/01-terraform-cloud-enterprise.md)
 
----
+**THE EXAM / INTERVIEW MEMORY HACK**
 
-### For Experienced Users (Quick Review)
+- For every fundamental, you need a story, an example, and a definition:
 
-**Day 1: Exam-Critical Topics**
-- [Terraform CLI Commands](02-Terraform-Basics-and-CLI/01-terraform-cli-commands.md)
-- [For Each vs Count](03-Terraform-Configuration-Language/02-for-each-vs-count.md)
-- [Provider Configuration](06-Providers-and-Registry/01-provider-configuration.md)
-- [Lifecycle Blocks](03-Terraform-Configuration-Language/03-lifecycle-blocks.md)
+- Story: “Here’s when I used it”
 
-**Day 2: Core Concepts**
-- [State Management](05-State-Backends-and-Workspaces/01-state-management.md)
-- [Variables and Outputs](03-Terraform-Configuration-Language/01-variables-and-outputs.md)
-- [Modules and Backends](04-Modules-and-Dependency-Management/01-modules-and-backends.md)
+- Example: “Here’s a code snippet”
 
-**Day 3: Advanced & Edge Cases**
-- [Advanced Terraform Features](05-State-Backends-and-Workspaces/02-advanced-terraform-features.md)
-- [Troubleshooting](00-Getting-Started/03-troubleshooting-and-debugging-terraform.md)
-- [Resource Targeting and Import](02-Terraform-Basics-and-CLI/02-resource-targeting-and-import.md)
-- [Secrets Management](08-Security-and-Best-Practices/01-secrets-management.md)
-- [Custom Validation Rules](03-Terraform-Configuration-Language/04-custom-validation-rules.md) ⭐ NEW
-- [Ephemeral Values & Write-Only Arguments](03-Terraform-Configuration-Language/05-ephemeral-values-write-only.md) ⭐ NEW
+- Definition: “Here’s the clean one-sentence version”
 
-**Day 4: Practice & Review**
-- Complete all practice questions
-- Review [Automating AWS Deployments](00-Getting-Started/02-automating-aws-deployments-with-terraform.md) and [HCP Terraform](07-Terraform-Cloud-and-Enterprise/01-terraform-cloud-enterprise.md) if needed
+- That’s how you sound senior.
 
 ---
 
