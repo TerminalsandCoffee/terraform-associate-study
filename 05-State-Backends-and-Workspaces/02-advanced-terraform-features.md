@@ -126,8 +126,37 @@ resource "aws_instance" "web" {
 Use provisioners sparingly and only when other options (like user_data, cloud-init, or configuration management tools such as Ansible) are not practical.
 
 ---
+## 4. Terraform Import – When & How to Use It 
 
-## 4. Lab Exercise
+`terraform import` is your lifeline when:
+
+- A resource **already exists** in the cloud  
+- You want **Terraform to manage** it going forward  
+- **Without recreating** it  
+- **Zero downtime**
+
+### Import Rules (do it in this exact order)
+
+1. Write the full resource block in your config first  
+2. Then run the import command:
+
+```bash
+terraform import aws_s3_bucket.demo mybucket
+```
+After import – reality check
+
+State now knows everything about the real resource 
+Your config must still match reality (attributes, tags, etc.)
+You’ll likely need to manually clean up/fix the config afterward
+
+Memory Trick (never forget this!)
+Import moves: Real world → State file
+Import does NOT generate or fix your config!
+This is the #1 thing juniors get wrong — import is NOT magic code-generation.
+
+---
+
+## Lab Exercise
 
 1. Create two workspaces:  
    ```bash
@@ -149,6 +178,7 @@ Use provisioners sparingly and only when other options (like user_data, cloud-in
 - **Workspaces**: Isolate environments with unique state files.  
 - **Data sources**: Read attributes of existing infrastructure.  
 - **Provisioners**: Run setup scripts during resource creation or destruction.
+- **Import**: Bring existing infrastructure under Terraform management (write config first, then import - it moves real world → state, but doesn't generate code). 
 
 ---
 

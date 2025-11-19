@@ -9,6 +9,7 @@
 ## Topics
 - [State Management](01-state-management.md)
 - [Advanced Terraform Features](02-advanced-terraform-features.md)
+- [Interview Questions](03-interview-questions)
 
 ## Cheat sheet
 - Inspect state: `terraform state list`
