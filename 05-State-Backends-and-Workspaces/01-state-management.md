@@ -28,6 +28,8 @@ Lose it, and Terraform forgets your infrastructure.
 
 “Terraform state maps real infrastructure to the configuration by storing IDs, attributes, and metadata Terraform needs to plan updates.”
 
+“Terraform uses state to determine the difference between desired config and real infrastructure.”
+
 ---
 
 ## 🗂️ 2. Local vs Remote State
@@ -119,7 +121,26 @@ kms_key_id = "arn:aws:kms:us-east-1:123456789012:key/abcd1234-..."
 
 ---
 
-## 7. Real-World Example
+## 7. Drift 
+Drift happens when the cloud changes WITHOUT Terraform knowing.
+
+Examples of drift:
+- Someone added tags in AWS console
+- A resource was deleted manually
+- A security group rule changed
+- A load balancer got a new listener
+
+Terraform detects drift during:
+- terraform plan
+- terraform apply
+- terraform plan -refresh-only
+
+Note: “Terraform will NOT fix drift automatically. It will show it in the plan.”
+And if something is deleted manually? Terraform sees: “Expected → found none → MUST be recreated.”
+
+---
+
+## 8. Real-World Example
 
 ```
 terraform {
