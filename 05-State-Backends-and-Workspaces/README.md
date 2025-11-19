@@ -37,3 +37,7 @@ terraform init
 terraform workspace new prod
 terraform state list
 ```
+---
+
+<img width="6044" height="5376" alt="image" src="https://github.com/user-attachments/assets/54475168-d27e-4603-a2dc-8a1776e6b1e5" />
+
