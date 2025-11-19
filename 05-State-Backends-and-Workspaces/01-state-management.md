@@ -24,6 +24,10 @@ Without it, Terraform wouldn’t know what exists and could recreate resources u
 Terraform state = Terraform’s “memory” or “etcd” (like Kubernetes).  
 Lose it, and Terraform forgets your infrastructure.
 
+**You must be able to say this cleanly in interviews**
+
+“Terraform state maps real infrastructure to the configuration by storing IDs, attributes, and metadata Terraform needs to plan updates.”
+
 ---
 
 ## 🗂️ 2. Local vs Remote State
