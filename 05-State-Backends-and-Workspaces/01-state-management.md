@@ -24,7 +24,7 @@ Without it, Terraform wouldn’t know what exists and could recreate resources u
 Terraform state = Terraform’s “memory” or “etcd” (like Kubernetes).  
 Lose it, and Terraform forgets your infrastructure.
 
-**You must be able to say this cleanly in interviews**
+### You must be able to say this cleanly in interviews
 
 “Terraform state maps real infrastructure to the configuration by storing IDs, attributes, and metadata Terraform needs to plan updates.”
 
@@ -43,6 +43,9 @@ Lose it, and Terraform forgets your infrastructure.
 - Stored in a shared backend (AWS S3, Terraform Cloud, etc.)
 - Enables team collaboration
 - Secures access, adds locking, and provides durability
+
+### Interview one-liner:
+“S3 backend + DynamoDB for state locking is the most common production setup.”
 
 ---
 
@@ -91,6 +94,14 @@ To prevent two people running terraform apply simultaneously:
 ```
 Error acquiring state lock
 ```
+
+To unlock:
+
+```
+terraform force-unlock <lock-id>
+```
+Used carefully — only when you KNOW no process is running.
+
 ---
 
 ## 5. Security & Best Practices
