@@ -1,0 +1,62 @@
+# SECTION 10 — Senior-Level Terraform Interview Questions 💪  
+*(The ones that separate the pros from the juniors)*
+
+Practice these like it’s the real interview — try answering out loud before you peek! 👀
+
+### 1. Why does Terraform need state?
+<details>
+<summary>🔍 Show Answer (don’t peek too early!)</summary>
+
+To keep a real-time mapping between your config and actual cloud resources so it knows exactly what changed and what to create/update/delete during `plan`/`apply`.
+
+</details>
+
+### 2. How do you fix infrastructure drift?
+<details>
+<summary>🔍 Show Answer</summary>
+
+Run `terraform plan` to detect it, then either `apply` to enforce the desired state **or** update your code to match reality (and optionally `terraform refresh` / `refresh-only`).
+
+</details>
+
+### 3. What is the benefit of a remote backend?
+<details>
+<summary>🔍 Show Answer</summary>
+
+Centralized state storage, state-file versioning, and most importantly — **state locking** so two people don’t corrupt state at the same time.
+
+</details>
+
+### 4. What happens if someone deletes a resource manually in AWS?
+<details>
+<summary>🔍 Show Answer</summary>
+
+Terraform sees it’s missing during the next `plan` and will happily recreate it on `apply` (because desired state > reality).
+
+</details>
+
+### 5. How do you import an existing S3 bucket?
+<details>
+<summary>🔍 Show Answer</summary>
+
+Write the `aws_s3_bucket` resource block first, then run:  
+```hcl
+resource "aws_s3_bucket" "demo" {
+  bucket = "my-bucket-name"
+}
+```
+```bash
+terraform import aws_s3_bucket.demo my-bucket-name
+```
+
+Remember: Import moves real world → state file. It does NOT generate or fix your config!
+</details>
+
+### 6. What is state locking?
+<details>
+<summary>🔍 Show Answer</summary>
+
+A safety mechanism (usually handled by the remote backend) that prevents multiple Terraform runs from modifying the state file simultaneously and causing corruption.
+
+</details>
+
