@@ -1,0 +1,6 @@
+apiVersion: v2
+name: observability-app
+version: 0.1.0
+description: Demo microservices app for EKS observability + service mesh
+appVersion: "1.0.0"
+type: application
