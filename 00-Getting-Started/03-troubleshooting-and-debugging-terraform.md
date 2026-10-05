@@ -11,7 +11,7 @@
 ## 1. Overview
 Terraform errors usually fall into a few buckets:
 
-- Backend/state problems (S3, DynamoDB, locking)
+- Backend/state problems (S3, state locks, permissions)
 - Auth/provider problems (AWS creds, region, profile)
 - Drift or “resource already exists” problems
 - Bad config problems (syntax, wrong refs, cycles)
@@ -27,7 +27,7 @@ When Terraform is being vague, turn on TF_LOG.
 ```bash
 export TF_LOG=DEBUG
 export TF_LOG_PATH=terraform.log
-terraform apply
+terraform plan
 ```
 
 **Windows (PowerShell):**
@@ -35,14 +35,17 @@ terraform apply
 ```powershell
 $env:TF_LOG="DEBUG"
 $env:TF_LOG_PATH="terraform.log"
-terraform apply
+terraform plan
 ```
 
 After that, check `terraform.log` in the current folder. Turn it off when done:
 
 ```bash
 unset TF_LOG
+unset TF_LOG_PATH
 ```
+
+For PowerShell, use `Remove-Item Env:TF_LOG, Env:TF_LOG_PATH -ErrorAction SilentlyContinue`. Debug logs can contain sensitive values; keep them out of version control. Reproduce with the least invasive command that shows the error.
 
 ## 3. Common Error: "Error loading state: AccessDenied" (S3 backend)
 
@@ -55,20 +58,21 @@ unset TF_LOG
 1. Check S3 bucket name in backend:
 
    ```hcl
-   backend "s3" {
-     bucket = "terraform-state-bucket"
-     key    = "global/terraform.tfstate"
-     region = "us-east-1"
+   terraform {
+     backend "s3" {
+       bucket       = "terraform-state-bucket"
+       key          = "global/terraform.tfstate"
+       region       = "us-east-1"
+       use_lockfile = true
+       encrypt      = true
+     }
    }
    ```
 
-2. Confirm your IAM has:
-   - s3:GetObject
-   - s3:PutObject
-   - s3:ListBucket  
-     on that bucket.
+2. Confirm your IAM policy allows `s3:ListBucket` on the bucket and `s3:GetObject`/`s3:PutObject` on the state object. With `use_lockfile = true`, also allow `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject` on the corresponding `.tflock` object. Check KMS permissions too when using a customer-managed KMS key.
 
-3. If you use DynamoDB for locking, also check:
+3. For a legacy DynamoDB lock configuration (now deprecated), also check:
+   - dynamodb:DescribeTable
    - dynamodb:GetItem
    - dynamodb:PutItem
    - dynamodb:DeleteItem
@@ -86,7 +90,9 @@ Happens when:
 
 **What to do:**
 
-1. If you know no one else is running Terraform:
+1. Check whether the lock belongs to an active operation. Wait for active operations to finish; `terraform plan -lock-timeout=5m` can wait for a lock.
+
+2. Only if your own operation failed and the lock is confirmed stale:
 
    ```bash
    terraform force-unlock <LOCK_ID>
@@ -94,7 +100,7 @@ Happens when:
 
    LOCK_ID will be in the error message.
 
-2. If using DynamoDB, you can also delete the lock item manually (AWS CLI), but force-unlock is safer.
+Do not remove an active lock or manually delete lock objects as a routine fix. A lock error can also indicate missing backend permissions; read the full diagnostic first.
 
 ## 5. Common Error: "Resource already exists"
 This shows up when:
@@ -111,8 +117,8 @@ This shows up when:
 terraform import aws_s3_bucket.logs my-logs-bucket
 ```
 
-**Option B: Rename / change resource name in config**  
-Use terraform state mv if you messed up the name:
+**Option B: Correct a renamed Terraform address**
+If the object is already in state at an old address, update the configuration and use a `moved` block or `terraform state mv` to preserve that binding:
 
 ```bash
 terraform state mv aws_instance.old aws_instance.new
@@ -129,16 +135,17 @@ Terraform can’t figure out which resource to create first.
 **Fix:**
 
 - Remove circular reference
-- Sometimes use depends_on  
+- Adding `depends_on` cannot break a dependency cycle; it adds another dependency. Prefer references for relationships Terraform can infer.
   **Example:**
 
   ```hcl
   resource "aws_iam_role_policy_attachment" "attach" {
     role       = aws_iam_role.app_role.name
     policy_arn = aws_iam_policy.app_policy.arn
-    depends_on = [aws_iam_policy.app_policy]
   }
   ```
+
+  This example already depends on both the role and the policy through its arguments. If either points back to the attachment, remove or restructure that reverse reference.
 
 ## 7. Debugging Provisioners
 Provisioners fail a lot more than people admit.
@@ -152,21 +159,12 @@ it usually means:
 
 **What to check:**
 
-- Does the instance have a public IP?
+- Does the runner have a route to the instance's private or public IP?
 - Is security group allowing SSH (22) from your runner / your IP?
 - Is the SSH user correct? (ubuntu vs ec2-user vs centos)
-- Add a sleep:
+- Check SSH connection timeouts and cloud-init/package-manager readiness; a fixed sleep does not reliably prove readiness.
 
-  ```hcl
-  provisioner "remote-exec" {
-    inline = [
-      "sleep 15",
-      "sudo apt-get update -y"
-    ]
-  }
-  ```
-
-Or better: move config to user_data.
+Prefer image building or `user_data`/cloud-init for bootstrapping. Use provisioners only when other mechanisms cannot meet the requirement.
 
 ## 8. State Surgery (When Things Are Out of Sync)
 
@@ -176,7 +174,7 @@ Or better: move config to user_data.
 terraform state rm aws_instance.old
 ```
 
-Use when Terraform thinks it owns a resource but it shouldn’t.
+Use when intentionally giving up management. Remove or refactor its resource block too, or the next plan will propose a new object at that address.
 
 **B. Rename something in state:**
 
@@ -184,7 +182,7 @@ Use when Terraform thinks it owns a resource but it shouldn’t.
 terraform state mv aws_instance.web aws_instance.web01
 ```
 
-Use when you copied a block and changed the name but Terraform is confused.
+Use when renaming the existing block, not when intentionally creating an additional resource. A `moved` block is the reviewable configuration-based alternative.
 
 **C. Show what’s in state:**
 
@@ -195,13 +193,14 @@ terraform state show aws_instance.web
 
 ## 9. Drift Detection
 If someone changes things in the console, terraform plan will show changes.  
-To refresh state without planning:
+To review drift and then record it in state without changing remote resources:
 
 ```bash
-terraform refresh
+terraform plan -refresh-only
+terraform apply -refresh-only
 ```
 
-(Heads up: refresh is being phased/moved in newer versions — but the idea is “sync with remote.”)
+`plan -refresh-only` previews state/output changes; `apply -refresh-only` asks for approval before persisting them. The older `terraform refresh` command is deprecated because it updates state without an approval prompt. A normal plan/apply instead reconciles remote infrastructure with configuration.
 
 ## 10. Provider/AWS Credential Problems
 If you see:
@@ -211,23 +210,23 @@ If you see:
 
 Then:
 
-- Check env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+- Check the selected credential source, including `AWS_SESSION_TOKEN` for temporary credentials, plus `AWS_REGION`/`AWS_PROFILE` as appropriate
 - If using profile:
 
   ```hcl
   provider "aws" {
     region  = "us-east-1"
-    profile = "cleardata"
+    profile = "study"
   }
   ```
 
 Run:
 
 ```bash
-aws sts get-caller-identity
+aws sts get-caller-identity --profile study
 ```
 
-If that fails, Terraform will fail too. Fix AWS CLI first.
+Test the same profile/role and environment Terraform uses. A successful AWS CLI call only verifies that identity; the provider and backend can use different credentials and still need permissions for their own operations.
 
 ## 11. Good Troubleshooting Flow
 
@@ -235,10 +234,10 @@ If that fails, Terraform will fail too. Fix AWS CLI first.
 2. terraform validate (is the config valid?)
 3. terraform plan (does the provider/auth/state work?)
 4. export TF_LOG=DEBUG and re-run if still broken
-5. Check S3/DynamoDB permissions
-6. If state is stuck → terraform force-unlock
+5. Check state object, S3 lockfile, and encryption permissions
+6. If your own lock is confirmed stale → terraform force-unlock
 7. If resource name is wrong → terraform state mv
-8. If console drift → terraform plan → apply
+8. If console drift → review a normal plan to restore configuration, or a refresh-only plan/apply to record intentional remote changes
 
 ---
 
@@ -267,7 +266,7 @@ D) The state file is corrupted
 
 <details>
 <summary>Show Answer</summary>
-Answer: **A** - State lock errors occur when another Terraform operation is running (or crashed and left a stale lock). If no one else is running Terraform, you can use `terraform force-unlock <LOCK_ID>` to release it.
+Answer: **A** - An active operation or stale lock is a common cause. Read the diagnostic and check ownership; use `terraform force-unlock <LOCK_ID>` only for your own confirmed stale lock after automatic unlocking failed.
 </details>
 
 ---
@@ -283,3 +282,10 @@ D) `terraform state delete`
 <summary>Show Answer</summary>
 Answer: **B** - `terraform state rm` removes a resource from state, but leaves the actual infrastructure intact in AWS. This is useful when moving resources between Terraform configurations or if a resource is now managed elsewhere.
 </details>
+
+## References
+
+- [S3 Backend Permissions and Locking](https://developer.hashicorp.com/terraform/language/backend/s3)
+- [State Locking and Force Unlock](https://developer.hashicorp.com/terraform/language/state/locking)
+- [Refresh-Only Mode](https://developer.hashicorp.com/terraform/cli/commands/plan#planning-modes)
+- [Provisioners](https://developer.hashicorp.com/terraform/language/resources/provisioners/syntax)

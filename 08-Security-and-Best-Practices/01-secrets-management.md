@@ -4,6 +4,7 @@
 - Understand best practices for handling secrets in Terraform.
 - Learn different methods for managing sensitive data.
 - Understand the limitations of `sensitive = true`.
+- Distinguish display redaction from ephemeral values and write-only arguments in Terraform 1.12.
 - Explore integration with external secret management systems.
 
 ---
@@ -22,6 +23,7 @@ Terraform configurations often need sensitive data:
 **Challenges:**
 - Secrets shouldn't be in version control
 - State files may contain secrets (even if marked sensitive)
+- Saved plan files and diagnostic logs can also contain secrets
 - Secrets need to be accessible to Terraform but secure
 
 ### Common Mistakes
@@ -38,7 +40,7 @@ password = "MySecretPassword123!"
 
 # BAD - Default value in code
 variable "db_password" {
-  default = "password123"  # Visible in code!
+  default = "password123" # Visible in code!
 }
 ```
 
@@ -56,34 +58,49 @@ variable "db_password" {
 }
 
 output "connection_string" {
-  value       = "postgresql://user:${var.db_password}@host/db"
-  sensitive   = true
+  value     = "postgresql://user:${var.db_password}@host/db"
+  sensitive = true
 }
 ```
 
 **What `sensitive = true` does:**
-- ✅ Redacts value from CLI output
-- ✅ Hides in `terraform plan` output
-- ✅ Masks in logs
+- ✅ Redacts marked values in normal human-readable plan/apply output
+- ✅ Propagates sensitivity through expressions that reference the value
 
 **What it doesn't do:**
 - ❌ Doesn't encrypt in state file
 - ❌ Doesn't prevent storage in state
 - ❌ Doesn't protect from state file access
+- ❌ Doesn't guarantee masking in provider/debug logs, provisioner commands, or external systems
 
 ### Limitations
 
-```bash
-# Value is hidden in output
-terraform output
+```console
+$ terraform output
 connection_string = (sensitive value)
-
-# But still in state file!
-terraform state show aws_db_instance.main | grep password
-password = "MySecretPassword123!"
 ```
 
-**Key point:** `sensitive = true` is for **display only**, not encryption.
+```bash
+# These commands intentionally reveal output values; do not use in shared logs.
+terraform output -raw connection_string
+terraform output -json
+```
+
+`terraform state show` normally redacts sensitive attributes too. Raw state, saved plans, and machine-readable output may expose values to authorized readers. Redaction is not encryption or omission from storage.
+
+### Ephemeral values and write-only arguments
+
+Terraform 1.10+ supports ephemeral variables, child-module outputs, and provider-defined ephemeral resources. Terraform 1.11+ adds provider-defined write-only resource arguments. Both features are available in the Terraform 1.12 exam baseline.
+
+```hcl
+variable "api_token" {
+  type      = string
+  sensitive = true
+  ephemeral = true
+}
+```
+
+`ephemeral` omits this value from state and saved plan files; `sensitive` also redacts normal display. Ephemeral values can only flow to supported contexts, such as provider configuration, other ephemeral values, provisioners, or a resource's write-only argument. You cannot pass one to an ordinary persisted `password` argument or expose it as a root output. Provider support is required for ephemeral resources and write-only arguments; use a compatible provider version and read its schema. See [sensitive data handling](https://developer.hashicorp.com/terraform/language/manage-sensitive-data).
 
 ---
 
@@ -91,20 +108,23 @@ password = "MySecretPassword123!"
 
 ### Method 1: Environment Variables
 
-**Best for:** Simple secrets, single-user scenarios
+**Best for:** Injecting values from a trusted shell or CI secret store. The following is Bash syntax and prompts instead of placing a password literal in shell history.
 
 ```bash
-export TF_VAR_db_password="MySecretPassword123!"
-terraform apply
+read -r -s -p "Database password: " TF_VAR_db_password
+printf '\n'
+export TF_VAR_db_password
+terraform plan
+unset TF_VAR_db_password
 ```
 
 **Pros:**
-- Not in code or files
+- No plaintext variable file is required; ordinary resource arguments can still persist the value in state/plan
 - Easy to set per environment
 - Works with CI/CD secrets
 
 **Cons:**
-- Visible in process list
+- May be exposed through process environments, debugging, or careless logging
 - Need to export before each run
 - No versioning or rotation
 
@@ -148,11 +168,9 @@ resource "aws_db_instance" "main" {
 ```
 
 **Setup in AWS:**
-```bash
-aws secretsmanager create-secret \
-  --name prod/database/password \
-  --secret-string '{"password":"MySecretPassword123!"}'
-```
+Create the secret through an approved secret-management workflow. Avoid passing secret literals on a command line or committing them to a file.
+
+This is a configuration fragment, not a complete RDS deployment. Reading a secret through an ordinary data source and assigning it to `password` still stores the secret in Terraform state. External storage alone does not prevent this. Rotation must also update the database and its consumers; rereading a secret is not itself a complete rotation workflow.
 
 **Pros:**
 - Centralized secret management
@@ -174,7 +192,7 @@ terraform {
   required_providers {
     vault = {
       source  = "hashicorp/vault"
-      version = "~> 3.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -203,6 +221,7 @@ resource "aws_db_instance" "main" {
 - Requires Vault infrastructure
 - More complex setup
 - Learning curve
+- Ordinary Vault data-source values are persisted in state; the example does not keep the password out of Terraform
 
 ### Method 5: CI/CD Secret Variables
 
@@ -210,21 +229,22 @@ resource "aws_db_instance" "main" {
 
 **GitHub Actions example:**
 ```yaml
-- name: Terraform Apply
+- name: Terraform Plan
   env:
     TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-  run: terraform apply
+  run: terraform plan -input=false
 ```
 
 **GitLab CI example:**
 ```yaml
-variables:
-  TF_VAR_db_password: $CI_JOB_TOKEN
-
 terraform:
+  variables:
+    TF_VAR_db_password: $DB_PASSWORD
   script:
-    - terraform apply
+    - terraform plan -input=false
 ```
+
+These are step/job fragments for an already initialized Terraform pipeline. Configure `DB_PASSWORD` as a protected/masked GitLab CI variable; `CI_JOB_TOKEN` is a GitLab authentication token, not a database password. Restrict secret-bearing runs to trusted code and protect any saved plans. For cloud authentication, prefer short-lived federated credentials instead of long-lived cloud keys where supported.
 
 **Pros:**
 - Integrated with CI/CD
@@ -248,7 +268,7 @@ resource "aws_db_instance" "main" {
 ```
 
 **Pros:**
-- Free (Standard parameters)
+- Supports standard and advanced parameter tiers (check current AWS pricing and API-throughput options)
 - Integrated with AWS
 - Versioning support
 
@@ -256,6 +276,7 @@ resource "aws_db_instance" "main" {
 - AWS-specific
 - Standard parameters not encrypted by default
 - Use SecureString for encryption
+- An ordinary `aws_ssm_parameter` data source still puts the decrypted value in state
 
 ---
 
@@ -268,6 +289,9 @@ resource "aws_db_instance" "main" {
 *.tfvars
 *.tfvars.json
 *.auto.tfvars
+*.tfstate
+*.tfstate.*
+*.tfplan
 secrets/
 .env
 ```
@@ -282,14 +306,10 @@ git diff --cached | grep -i key
 
 ### 2. Protect State Files
 
-**State files contain secrets:**
-```bash
-# State file has all resource attributes
-terraform state pull | grep password
-```
+**State and saved plans can contain secrets.** Avoid printing raw state to the terminal or CI logs to demonstrate this; inspect only disposable, non-secret examples.
 
 **Protect state files:**
-- ✅ Use remote backends (S3, Terraform Cloud)
+- ✅ Use access-controlled remote backends (S3, HCP Terraform)
 - ✅ Enable encryption at rest
 - ✅ Restrict access with IAM
 - ✅ Enable versioning
@@ -314,21 +334,21 @@ terraform state pull | grep password
 **Structure:**
 ```
 .
-├── terraform.tfvars          # Non-sensitive values (committed)
+├── terraform.tfvars.example  # Non-sensitive template (committed)
 ├── secrets.tfvars            # Secrets (NOT committed)
 └── .gitignore                # Ignore secrets.tfvars
 ```
 
 **Usage:**
 ```bash
-terraform apply -var-file=terraform.tfvars -var-file=secrets.tfvars
+terraform plan -var-file=secrets.tfvars
 ```
 
 ### 5. Rotate Secrets Regularly
 
 **If using Secrets Manager:**
 - Enable automatic rotation
-- Update Terraform when secrets rotate
+- Coordinate rotation with the database/application; avoid conflicting Terraform and service-managed password ownership
 
 **If using environment variables:**
 - Update CI/CD secret variables
@@ -350,57 +370,52 @@ output "db_password" {
 
 ---
 
-## 5. Real-World Example: Database Password
+## 5. Real-World Example: Service-Managed Database Password
 
 ### Scenario
-Create an RDS instance with a secure password from AWS Secrets Manager.
+Let RDS generate and manage its master password in Secrets Manager. Terraform configures the integration and stores secret metadata, without fetching the password into a normal data source.
 
-**Step 1: Create secret in AWS (one-time setup):**
-```bash
-aws secretsmanager create-secret \
-  --name prod/rds/password \
-  --secret-string '{"password":"$(openssl rand -base64 32)"}'
-```
+**Configuration fragment:** Supply an AWS provider, private DB subnet group, and appropriately restricted security group before planning. This creates billable infrastructure if applied.
 
-**Step 2: Terraform configuration:**
 ```hcl
-data "aws_secretsmanager_secret_version" "rds_password" {
-  secret_id = "prod/rds/password"
+variable "db_subnet_group_name" {
+  type = string
 }
 
-locals {
-  db_credentials = jsondecode(data.aws_secretsmanager_secret_version.rds_password.secret_string)
+variable "db_security_group_id" {
+  type = string
 }
 
 resource "aws_db_instance" "main" {
-  identifier     = "prod-database"
-  engine         = "postgres"
-  instance_class = "db.t3.micro"
-  
-  # Password from Secrets Manager
-  password = local.db_credentials["password"]
-  
-  # Other config...
-  allocated_storage = 20
-  
+  identifier                  = "study-database"
+  engine                      = "postgres"
+  instance_class              = "db.t3.micro"
+  allocated_storage           = 20
+  username                    = "dbadmin"
+  manage_master_user_password = true
+  storage_encrypted           = true
+  publicly_accessible         = false
+  db_subnet_group_name        = var.db_subnet_group_name
+  vpc_security_group_ids      = [var.db_security_group_id]
+  backup_retention_period     = 7
+  deletion_protection         = true
+  skip_final_snapshot         = false
+  final_snapshot_identifier   = "study-database-final-snapshot"
+
   tags = {
-    Name = "Production Database"
+    Name = "Study Database"
   }
 }
 
-# Don't output password - fetch from Secrets Manager when needed
+# Applications retrieve the password through their own authorized runtime access.
 output "database_endpoint" {
   value       = aws_db_instance.main.endpoint
-  description = "RDS endpoint (password in Secrets Manager)"
+  description = "RDS endpoint; credentials are managed by RDS in Secrets Manager"
   sensitive   = false
 }
 ```
 
-**Step 3: Apply:**
-```bash
-terraform apply
-# Password never appears in output or logs
-```
+Review the plan, region/engine availability, IAM permissions, backup settings, and costs before applying in a lab. Deletion protection must be deliberately disabled before cleanup; the final snapshot name must be unique. See [`aws_db_instance`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance) and [RDS password management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html).
 
 ---
 
@@ -408,7 +423,7 @@ terraform apply
 
 ### The State File Problem
 
-**State files contain ALL resource attributes, including secrets:**
+**State can contain ordinary resource and data-source attributes, including secrets.** Sensitive marking does not omit them. Ephemeral values and write-only arguments are exceptions. A simplified example of a persisted password:
 
 ```json
 {
@@ -434,12 +449,12 @@ terraform apply
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "terraform-state"
-    key            = "prod/database/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    kms_key_id     = "arn:aws:kms:..."
-    dynamodb_table = "terraform-locks"
+    bucket       = "terraform-state"
+    key          = "prod/database/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    kms_key_id   = "arn:aws:kms:..."
+    use_lockfile = true
   }
 }
 ```
@@ -449,29 +464,47 @@ terraform {
 - KMS: Customer-managed keys for additional control
 
 **3. Restrict Access:**
+
+Example IAM identity-policy fragment for the execution role and the **default workspace** above. Add KMS permissions for the configured key; named workspaces use different state paths. Do not grant other principals broad bucket access.
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::123456789012:role/TerraformRole"
-      },
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::terraform-state",
+      "Condition": {
+        "StringEquals": {
+          "s3:prefix": "prod/database/terraform.tfstate"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
       "Action": [
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::terraform-state/*"
+      "Resource": "arn:aws:s3:::terraform-state/prod/database/terraform.tfstate"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::terraform-state/prod/database/terraform.tfstate.tflock"
     }
   ]
 }
 ```
 
-**4. Use Terraform Cloud:**
+Native S3 locking requires Terraform 1.10+; DynamoDB locking is deprecated. See [S3 permissions and encryption](https://developer.hashicorp.com/terraform/language/backend/s3).
+
+**4. Use HCP Terraform:**
 - Automatic encryption
 - Access controls
 - Audit logs
+
+Limit state-download permissions as well as UI access. `terraform_remote_state` readers need access to the entire snapshot even though the data source exposes only root outputs. Use explicit data publication or HCP Terraform's `tfe_outputs` where appropriate. See [remote state access](https://developer.hashicorp.com/terraform/language/state/remote-state-data).
 
 ---
 
@@ -481,12 +514,12 @@ terraform {
 What does `sensitive = true` do for a variable or output?
 A) Encrypts the value in the state file
 B) Prevents the value from being stored in state
-C) Hides the value from CLI output but still stores it in state
+C) Redacts normal display but does not prevent persistence in state or plans
 D) Requires the value to be provided via secret manager
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - `sensitive = true` only hides values from CLI output and logs. The value is still stored in the state file in plaintext. For true security, use external secret management and protect state files.
+Answer: **C** - Sensitive marking redacts normal display, but does not encrypt or omit persisted values. Raw/JSON output and logs need separate protection. Ephemeral values and provider write-only arguments address persistence in supported contexts.
 </details>
 
 ---
@@ -500,7 +533,7 @@ D) Use default values in variable definitions
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - For production, use external secret management systems like AWS Secrets Manager, HashiCorp Vault, or Azure Key Vault. These provide encryption, rotation, and access control.
+Answer: **B** - Secret managers provide access control, auditing, and rotation support. Ordinary Terraform data sources can still copy retrieved secrets into state; use supported ephemeral/write-only flows or service-managed credentials when avoiding that persistence is required.
 </details>
 
 ---
@@ -514,19 +547,19 @@ D) State files can only be used once
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - State files contain all resource attributes, including sensitive values like passwords, even if marked with `sensitive = true`. Always use encrypted remote backends and restrict access.
+Answer: **B** - State may contain passwords and other sensitive attributes even if marked with `sensitive = true`. Encrypt stored state and restrict access; ephemeral and write-only values are omitted where supported.
 </details>
 
 ---
 
 ## 8. Key Takeaways
 
-- **`sensitive = true`** only hides values from CLI output - they're still in state files.
+- **`sensitive = true`** redacts normal display; it does not prevent persistence or guarantee log masking.
 - **Never commit secrets** to version control - use `.gitignore` for `.tfvars` files with secrets.
 - **Use external secret managers** (AWS Secrets Manager, Vault) for production environments.
 - **Protect state files** with encryption, access controls, and remote backends.
 - **Environment variables** (`TF_VAR_*`) are simple but have limitations.
-- **State files contain all attributes** including secrets - always encrypt and restrict access.
+- **Ephemeral/write-only values** avoid state/plan persistence in supported contexts; ordinary data sources and secret arguments may persist values.
 - **Rotate secrets regularly** and update Terraform configurations accordingly.
 
 ---

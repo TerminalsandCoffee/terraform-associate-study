@@ -9,30 +9,25 @@ This repository organizes Terraform Associate certification notes, labs, and che
 
 ## 🎯 Exam Version Information
 
-**Current Exam Version: 004 (as of January 2026)**
+**Study target: Terraform Associate 004 · Terraform 1.12**
 
-- **Exam 003 Retirement:** January 7, 2026
-- **Exam 004 Launch:** January 8, 2026
-- **Terraform Version:** Exam 004 aligns with Terraform 1.12
+Last reviewed: October 5, 2026.
 
-### Which Exam Should You Take?
-
-- **Taking the exam before January 7, 2026?** → Study for **Exam 003** (current version)
-- **Taking the exam on or after January 8, 2026?** → Study for **Exam 004** (new version)
+HashiCorp's [official learning path](https://developer.hashicorp.com/terraform/tutorials/certification-004/associate-study-004) identifies Terraform 1.12 as the version tested. Use the [exam content list](https://developer.hashicorp.com/terraform/tutorials/certification-004/associate-review-004) as your coverage checklist and the [official sample questions](https://developer.hashicorp.com/terraform/tutorials/certification-004/associate-questions-004) to learn the question formats.
 
 ### Key Changes in Exam 004
 
 **New Topics:**
 - Custom Validation Rules (variable validation, preconditions, postconditions)
 - Ephemeral Values and Write-Only Arguments
-- Enhanced lifecycle rules coverage (including `depends_on`)
+- Resource dependencies with `depends_on`, and lifecycle behavior such as `create_before_destroy`. `depends_on` is a separate meta-argument, placed outside the `lifecycle` block.
 - HCP Terraform Workspaces and Projects (rebranded from Terraform Cloud)
 
 **Updated Focus:**
 - Terraform 1.12 features and capabilities
 - Modern best practices and patterns
 
-This study guide has been updated to align with **Exam 004** and Terraform 1.12. All examples and content reflect the latest exam objectives.
+This independent study guide supplements the official objectives. It includes AWS-specific practice and additional operational topics; those are not all exam requirements. Code blocks are focused teaching examples and may require the surrounding configuration and placeholder values described in each lesson.
 
 ---
 
@@ -71,28 +66,33 @@ This study guide has been updated to align with **Exam 004** and Terraform 1.12.
 ### For Complete Beginners
 
 **Week 1: Foundations**
+
 1. Start with [Intro to Terraform](00-Getting-Started/01-intro-to-terraform.md) to understand core concepts
 2. Read [State Management](05-State-Backends-and-Workspaces/01-state-management.md) to grasp how Terraform tracks infrastructure
 3. Complete the lab challenges
 
 **Week 2: Core Configuration**
+
 4. Study [Variables and Outputs](03-Terraform-Configuration-Language/01-variables-and-outputs.md) for dynamic configurations
 5. Learn [Modules and Backends](04-Modules-and-Dependency-Management/01-modules-and-backends.md) for reusable code
 6. Practice creating a module
 
 **Week 3: Advanced Concepts**
+
 7. Cover [Terraform CLI Commands](02-Terraform-Basics-and-CLI/01-terraform-cli-commands.md) (essential for exam!)
 8. Master [For Each vs Count](03-Terraform-Configuration-Language/02-for-each-vs-count.md) (frequently tested)
 9. Study [Provider Configuration](06-Providers-and-Registry/01-provider-configuration.md) and [Lifecycle Blocks](03-Terraform-Configuration-Language/03-lifecycle-blocks.md)
 
 **Week 4: Real-World & Exam Prep**
+
 10. Review [Advanced Terraform Features](05-State-Backends-and-Workspaces/02-advanced-terraform-features.md) (workspaces, data sources)
 11. Read [Resource Targeting and Import](02-Terraform-Basics-and-CLI/02-resource-targeting-and-import.md)
 12. Study [Secrets Management](08-Security-and-Best-Practices/01-secrets-management.md) for production scenarios
 13. Study [Custom Validation Rules](03-Terraform-Configuration-Language/04-custom-validation-rules.md) (new in Exam 004!)
 14. Study [Ephemeral Values & Write-Only Arguments](03-Terraform-Configuration-Language/05-ephemeral-values-write-only.md) (new in Exam 004!)
 15. Review [Troubleshooting](00-Getting-Started/03-troubleshooting-and-debugging-terraform.md) to handle common issues
-16. Optional: [Automating AWS Deployments](00-Getting-Started/02-automating-aws-deployments-with-terraform.md) and [HCP Terraform](07-Terraform-Cloud-and-Enterprise/01-terraform-cloud-enterprise.md)
+16. Study [HCP Terraform](07-Terraform-Cloud-and-Enterprise/01-terraform-cloud-enterprise.md), including workspaces, projects, and collaboration (exam objective 8)
+17. Optional practice: [Automating AWS Deployments](00-Getting-Started/02-automating-aws-deployments-with-terraform.md)
 
 **THE EXAM / INTERVIEW MEMORY HACK**
 
@@ -110,11 +110,13 @@ This study guide has been updated to align with **Exam 004** and Terraform 1.12.
 
 ### Exam Focus Areas
 
+The priorities below are a suggested study order, not official exam weights. Cover every objective on HashiCorp's content list, including HCP Terraform.
+
 **Highest Priority (Study First):**
 - ✅ [Terraform CLI Commands](02-Terraform-Basics-and-CLI/01-terraform-cli-commands.md) (fmt, validate, plan flags, state commands)
 - ✅ [For Each vs Count](03-Terraform-Configuration-Language/02-for-each-vs-count.md)
 - ✅ [Provider Configuration](06-Providers-and-Registry/01-provider-configuration.md) and version constraints
-- ✅ [Lifecycle Blocks](03-Terraform-Configuration-Language/03-lifecycle-blocks.md) (all 4 rules + depends_on)
+- ✅ [Lifecycle Blocks](03-Terraform-Configuration-Language/03-lifecycle-blocks.md) and the separate `depends_on` meta-argument
 - ✅ [Custom Validation Rules](03-Terraform-Configuration-Language/04-custom-validation-rules.md) ⭐ NEW in Exam 004!
 - ✅ [Ephemeral Values & Write-Only Arguments](03-Terraform-Configuration-Language/05-ephemeral-values-write-only.md) ⭐ NEW in Exam 004!
 
@@ -145,10 +147,12 @@ This study guide has been updated to align with **Exam 004** and Terraform 1.12.
 
 ## Prerequisites
 
-- AWS account (for labs)
-- Terraform CLI (v1.12+) - Required for Exam 004
-- AWS CLI (configured credentials)
-- Basic knowledge of AWS services (EC2, S3, IAM)
+- Terraform CLI 1.12.x for matching the exam baseline; examples may state additional provider requirements. Newer Terraform releases can introduce behavior outside the exam scope.
+- Basic terminal skills and an understanding of cloud infrastructure.
+- An AWS account and AWS CLI credentials for the AWS exercises only. Prefer temporary credentials or IAM Identity Center rather than long-lived keys.
+- Basic knowledge of EC2, S3, and IAM for the AWS examples.
+
+Use a disposable lab directory and a sandbox AWS account. Review plans before applying, check service costs, and destroy lab resources when finished. Keep state, saved plans, credentials, and private variable files out of Git. Commit `.terraform.lock.hcl` to preserve provider selections.
 
 ---
 
@@ -158,10 +162,10 @@ This repo serves as both a personal learning record and a resource for others pr
 Each section includes concise explanations, CLI commands, and hands-on lab code that mirrors real-world workflows in AWS.
 
 **Recently Enhanced:** 
-- All content updated for Terraform 1.12 and Exam 004 alignment.
+- Reviewed study material against the Terraform 1.12 / exam 004 baseline.
 - Added Custom Validation Rules and Ephemeral Values & Write-Only Arguments (new Exam 004 topics).
 - Updated HCP Terraform section with Projects feature.
-- Enhanced lifecycle blocks with comprehensive `depends_on` coverage.
+- Clarified lifecycle behavior and explicit resource dependencies.
 
 I will be continuously updating as I revisit the fundamentals of terraform.
 
@@ -175,6 +179,17 @@ If you find this helpful, feel free to **star** ⭐ the repo or fork it to follo
 - Keep hands-on tasks short (a few commands or a concise Terraform snippet) so learners can complete them quickly.
 - Update this README when adding new top-level domains or reorganizing content.
 - Open issues or pull requests with clear descriptions of what changed and why.
+
+Before submitting, run these checks with Python 3.12+, Terraform 1.12.2, Git, and PowerShell 7 (`pwsh`):
+
+```bash
+python Scripts/check-study-guide.py
+python -m unittest discover -s Scripts/tests -v
+```
+
+CI checks local Markdown file links, closed code fences, and HCL syntax inside `hcl` / `terraform` fences. It also exercises the Git helper in disposable local repositories. HCL parsing does not validate provider schemas or resolve references between fragments; use `terraform init -backend=false` and `terraform validate` on complete lab configurations as well. Intentionally invalid code and alternative fragments that cannot be parsed together should use a `text` fence and explain why. No cloud resources are created by these checks.
+
+The previous tfsec workflow scanned for `.tf` files, which this Markdown-only guide does not contain. These checks cover the embedded examples; they are not a security scan. Add configuration validation and security scanning when introducing standalone Terraform labs.
 
 Happy studying, and good luck on the Terraform Associate exam!
 

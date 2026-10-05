@@ -28,20 +28,22 @@ Create a minimal configuration and walk the workflow:
 ```hcl
 # main.tf
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.12, < 2.0"
 }
 
-resource "null_resource" "example" {
-  provisioner "local-exec" {
-    command = "echo hello"
-  }
+resource "terraform_data" "example" {
+  input = "hello"
+}
+
+output "message" {
+  value = terraform_data.example.output
 }
 ```
 Then run:
 ```bash
 terraform init
 terraform plan
-terraform apply -auto-approve
+terraform apply
 ```
 -----
 
@@ -54,10 +56,9 @@ A **declarative IaC (Infrastructure as Code)** tool that uses a **desired-state*
 It compares your written configuration against the recorded state and applies only the changes needed to make reality match your code.
 
 ### “What does `terraform init` do?”
-Downloads required:
+Initializes the backend and downloads required:
 - Providers
 - Modules
-- Backend configuration  
 
 Basically initializes the working directory and gets everything ready to roll.
 
@@ -66,7 +67,7 @@ Basically initializes the working directory and gets everything ready to roll.
 1. `init`   – set up backend, download providers/modules  
 2. `plan`   – preview what Terraform wants to do  
 3. `apply`  – make the changes for real  
-4. `destroy`– nuke everything when you’re done
+4. `destroy` – remove the resources managed in the selected state when the lab is finished
 
 ### “What is the difference between a resource and a data source?”
 | Type         | Purpose                         | Creates something? |
@@ -77,7 +78,7 @@ Basically initializes the working directory and gets everything ready to roll.
 Resource = “make this thing”  
 Data source = “go look up this thing that already exists”
 
-### “Where should variables, outputs, and providers go? (Community convention)
+### “Where should variables, outputs, and providers go?” (Community convention)
 
 | File           | Typical contents                                  |
 |----------------|----------------------------------------------------|
@@ -88,14 +89,14 @@ Data source = “go look up this thing that already exists”
 
 # Terraform Quick Fire – Can You Answer These Smoothly?
 
-Practice saying each one **out loud** in a single, confident sentence. No stuttering allowed jr 😏
+Practice explaining each one **out loud** in a single sentence.
 
 | # | Question                              | Your One-Sentence Answer (say it like you mean it) |
 |---|---------------------------------------|----------------------------------------------------|
 | 1 | **What does `terraform init` do?**    | It initializes the working directory, downloads providers and modules, configures the backend, and creates the `.terraform.lock.hcl` dependency lock file. |
-| 2 | **Why do we need a provider block?**  | Because Terraform core doesn’t natively speak AWS/Azure/GCP — providers are the plugins that translate your HCL into actual API calls. |
+| 2 | **What does a provider block configure?** | It supplies settings such as region or authentication for a provider; some providers can use defaults without an explicit block. |
 | 3 | **What is a resource vs data source?**| Resources **create or manage** real infrastructure; data sources **read** information about things that already exist. |
-| 4 | **Why do we use outputs?**            | To safely expose important values (ARNs, IPs, URLs, bucket names) from your config or modules so humans and other Terraform configs can use them after `apply`. |
+| 4 | **Why do we use outputs?**            | To expose selected values from a module; root outputs are available through the CLI and state, so handle sensitive values carefully. |
 | 5 | **What is Terraform’s workflow?**     | `init` → `plan` → `apply` → (optional) `destroy` — turning your desired-state code into real cloud resources. |
 
 - If you can say those comfortably? You’ve internalized the fundamentals.

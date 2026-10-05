@@ -17,7 +17,7 @@
     cidr_block = "10.0.0.0/16"
   }
   ```
-- Pin module versions: `version = "~> 2.0"`
+- Constrain registry module versions: `version = "~> 2.0"` (allows 2.x); pin exactly with `version = "2.0.0"`. Git modules use a `?ref=` tag or commit in `source`; local modules have no `version` argument.
 - Explicit dependency: `depends_on = [module.network]`
 
 ## Official documentation
@@ -30,6 +30,15 @@ Create a simple module structure:
 ```bash
 mkdir -p modules/random_pet
 cat <<'HCL' > modules/random_pet/main.tf
+terraform {
+  required_providers {
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0"
+    }
+  }
+}
+
 resource "random_pet" "this" {
   prefix = var.prefix
 }
@@ -44,4 +53,26 @@ variable "prefix" {
 }
 HCL
 ```
-Then consume it in `main.tf` and run `terraform init && terraform apply` to observe the generated pet name.
+Then consume it in the root `main.tf`:
+
+```hcl
+terraform {
+  required_providers {
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+}
+
+module "pet" {
+  source = "./modules/random_pet"
+  prefix = "study"
+}
+
+output "pet_name" {
+  value = module.pet.name
+}
+```
+
+Run `terraform init` followed by `terraform apply` to observe the generated pet name.

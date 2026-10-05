@@ -26,4 +26,4 @@ terraform.tfvars # values for input variables
 
 ## Memory Trick: 
 - MVO = main, variables, outputs
-- Terraform sees all .tf files as one big file
+- Terraform combines `.tf` and `.tf.json` files in the same module directory; it does not automatically include nested directories.

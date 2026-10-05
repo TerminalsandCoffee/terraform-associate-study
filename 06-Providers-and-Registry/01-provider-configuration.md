@@ -16,7 +16,7 @@ A **provider** is a plugin that Terraform uses to interact with APIs of cloud pl
 - `aws` - Amazon Web Services
 - `azurerm` - Microsoft Azure
 - `google` - Google Cloud Platform
-- `null` - Utility provider (does nothing)
+- `null` - Utility provider with resources that manage lifecycle and triggers without creating infrastructure
 - `local` - Local system (files, etc.)
 
 ---
@@ -40,11 +40,9 @@ provider "aws" {
 
 ```hcl
 provider "aws" {
-  region                  = "us-east-1"
+  region                   = "us-east-1"
   shared_credentials_files = ["~/.aws/credentials"]
   profile                  = "default"
-  access_key               = "AKIA..."        # Not recommended
-  secret_key               = "secret..."       # Not recommended
 }
 ```
 
@@ -67,7 +65,7 @@ Providers are constantly updated. Version constraints ensure:
 
 ```hcl
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.12, < 2.0"
   
   required_providers {
     aws = {
@@ -97,9 +95,10 @@ provider "aws" {
 **Most common:** `~>` (pessimistic constraint operator)
 
 **Example:**
-```hcl
+```text
 version = "~> 5.0"    # Allows 5.0.0, 5.1.0, 5.9.9, but NOT 6.0.0
-version = "~> 5.25"   # Allows 5.25.0, 5.25.1, but NOT 5.26.0 or 6.0.0
+version = "~> 5.25"   # Allows >= 5.25.0 and < 6.0.0 (including 5.26.0)
+version = "~> 5.25.0" # Allows >= 5.25.0 and < 5.26.0 (patch updates only)
 ```
 
 ### Multiple Provider Constraints
@@ -137,12 +136,12 @@ terraform {
 
 **Common patterns:**
 - `hashicorp/aws` - Official HashiCorp AWS provider
-- `terraform-aws-modules/aws` - Community module (NOT a provider)
+- `terraform-aws-modules/vpc/aws` - Registry module address (NOT a provider)
 - `custom-org/custom-provider` - Custom provider
 
 ### Default Registry Providers
 
-For providers in the Terraform Registry, you can omit the full source:
+For public registry providers, you can omit the hostname, for example `hashicorp/aws`. If you omit `source` entirely, Terraform assumes `registry.terraform.io/hashicorp/<LOCAL-NAME>` for backward compatibility; declare it explicitly in new modules:
 
 ```hcl
 required_providers {
@@ -236,12 +235,14 @@ provider "aws" {
   region = "eu-west-1"
 }
 
-resource "aws_instance" "main" {
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
   # Uses default provider
 }
 
-resource "aws_instance" "dev" {
-  provider = aws.dev_account
+resource "aws_vpc" "dev" {
+  provider   = aws.dev_account
+  cidr_block = "10.1.0.0/16"
   # Uses dev account
 }
 
@@ -280,26 +281,32 @@ module "vpc_west" {
 
 **Child module (`modules/vpc/main.tf`):**
 ```hcl
-provider "aws" {
-  # Configuration can be omitted if passed from root
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
 }
 
 resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
   # Uses the provider passed from root
 }
 ```
 
 ---
 
-## 6. Provider Configuration Precedence
+## 6. Provider Selection and Authentication
 
-When the same provider is configured multiple times, Terraform uses this order (highest → lowest):
+Terraform selects a provider configuration separately from how that provider reads credentials:
 
-1. **Provider argument in resource block** (`provider = aws.west`)
-2. **Provider alias in module block** (`providers = { aws = aws.west }`)
-3. **Default provider configuration** (non-aliased provider)
-4. **Environment variables** (e.g., `AWS_REGION`)
-5. **AWS CLI configuration** (`~/.aws/config`)
+1. A resource's `provider = aws.west` selects that provider configuration. Without it, the resource uses the default configuration for its provider.
+2. A module's `providers = { aws = aws.west }` maps the child's local provider name to a configuration in the parent. Aliased configurations are not inherited automatically.
+3. The selected provider resolves its own settings and credentials using its documented authentication chain (for example, environment variables, shared AWS profiles, or IAM roles). These are not fallback provider configurations.
+
+See [provider configuration](https://developer.hashicorp.com/terraform/language/providers/configuration) and the [AWS provider authentication reference](https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication-and-configuration).
 
 ---
 
@@ -367,26 +374,19 @@ module "multi_region" {
 
 **Child module (`modules/vpc/main.tf`):**
 ```hcl
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-# Configuration Requirements block (Terraform 0.13+)
+# Declare requirements and any aliases used by resources in this child module.
 terraform {
   required_providers {
     aws = {
       source                = "hashicorp/aws"
-      version               = "~> 5.0"
+      version               = ">= 5.0"
       configuration_aliases = [aws.west]  # Declare required alias
     }
   }
 }
 ```
+
+Keep provider configuration blocks in the root module. The child declares requirements; a child resource can then use `provider = aws.west`. See [providers within modules](https://developer.hashicorp.com/terraform/language/modules/develop/providers).
 
 ---
 
@@ -408,7 +408,7 @@ terraform {
 
 2. **Use version constraints:**
    - `~> 5.0` for patch/minor updates
-   - Pin exact version in production if needed
+   - Commit `.terraform.lock.hcl` so `terraform init` reuses the selected provider versions; use `terraform init -upgrade` to deliberately update within constraints
 
 3. **Store credentials securely:**
    - Use AWS CLI config or environment variables
@@ -448,7 +448,7 @@ terraform {
 What does the version constraint `"~> 5.0"` mean?
 A) Exactly version 5.0
 B) Greater than or equal to 5.0, less than 6.0
-C) Any version starting with 5
+C) Only patch releases in 5.0.x
 D) Latest version 5.x
 
 <details>
@@ -580,10 +580,10 @@ terraform {
 ## 12. Key Takeaways
 
 - **`required_providers`**: Declares provider requirements in a `terraform` block.
-- **Version constraints**: Use `~>` for pessimistic constraints (allows patch/minor, not major).
+- **Version constraints**: `~> 5.0` allows minor and patch updates within 5.x; `~> 5.25.0` allows only patches within 5.25.x.
 - **Provider aliases**: Use `alias` to create multiple provider instances for different configs.
 - **Provider reference**: Use `provider = aws.alias_name` in resources to use aliased providers.
-- **Source format**: `registry.terraform.io/namespace/provider-name` (can omit registry for official providers).
+- **Source format**: `registry.terraform.io/namespace/provider-name` (can omit the hostname for any provider in the public registry).
 - **Never hardcode credentials**: Use environment variables or AWS CLI configuration.
 - **Module providers**: Pass providers to modules using `providers = { aws = aws.west }` block.
 

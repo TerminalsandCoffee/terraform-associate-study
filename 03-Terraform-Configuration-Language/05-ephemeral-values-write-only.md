@@ -1,546 +1,276 @@
-# 15 - Ephemeral Values and Write-Only Arguments
+# Ephemeral Values and Write-Only Arguments
 
 ## Learning Objectives
-- Understand what ephemeral values are and why they shouldn't be stored in state.
-- Learn about write-only arguments in Terraform resources.
-- Master best practices for handling sensitive data that shouldn't persist.
-- Apply these concepts to real-world AWS resource scenarios.
+- Distinguish sensitive, ephemeral, and write-only values.
+- Know which Terraform values persist in state and plan files.
+- Use provider-supported write-only arguments and update triggers.
+- Recognize the limitations of secret managers and ordinary data sources.
 
 ---
 
 ## 1. Overview: Ephemeral Values vs Persistent State
 
-Terraform state stores resource attributes to track infrastructure. However, some values should **never** be stored in state:
+This chapter targets Terraform 1.12. Ephemeral variables, child module outputs, and resources require Terraform 1.10 or later. Write-only resource arguments require Terraform 1.11 or later **and a supporting provider version**.
 
-- **Ephemeral Values**: Data that changes frequently or shouldn't be tracked (e.g., temporary tokens, session data)
-- **Write-Only Arguments**: Resource attributes that can be set but never read back (e.g., passwords, secrets)
+| Mechanism | Purpose | Omitted from state and plan files? |
+|-----------|---------|-----------------------------------|
+| `sensitive = true` | Redact normal plan/apply output | No |
+| `ephemeral = true` | Pass a variable or child module output only for the operation | Yes |
+| `ephemeral` resource block | Obtain or generate a temporary value | Yes |
+| Provider-defined write-only argument | Send a value without persisting that argument | Yes |
 
-Understanding these concepts is critical for security and proper Terraform usage.
-
----
+A password is not automatically ephemeral because it is secret or short-lived. An API's refusal to return a password also does **not** mean Terraform omitted the configured password from state.
 
 ## 2. What Are Ephemeral Values?
 
-### Definition
-
-**Ephemeral values** are resource attributes that:
-- Change frequently or are temporary
-- Should not be stored in Terraform state
-- May contain sensitive information
-- Are not needed for resource management
-
-### Examples of Ephemeral Values
-
-- **Temporary access tokens** (AWS STS session tokens)
-- **One-time passwords** (OTP codes)
-- **Session keys** (encryption keys that rotate)
-- **Dynamic credentials** (temporary IAM credentials)
-- **Time-sensitive data** (expiration timestamps)
-
-### Why Ephemeral Values Matter
-
-1. **Security**: Sensitive data shouldn't persist in state files
-2. **State file size**: Reduces state file bloat
-3. **State file security**: Limits exposure of sensitive information
-4. **Best practices**: Aligns with security best practices
-
----
-
-## 3. Write-Only Arguments
-
-### Definition
-
-**Write-only arguments** are resource attributes that:
-- Can be **set** during resource creation
-- Cannot be **read back** from the provider API
-- Are typically sensitive (passwords, secrets, keys)
-- Are not stored in Terraform state (by design)
-
-### Common Write-Only Arguments in AWS
-
-#### Example 1: RDS Database Password
-
-```hcl
-resource "aws_db_instance" "main" {
-  identifier     = "prod-database"
-  engine         = "mysql"
-  instance_class = "db.t3.medium"
-  
-  # Write-only: Can set password, but cannot read it back
-  password = var.db_password  # Sensitive, write-only
-  
-  # This is NOT stored in state
-  # Terraform cannot read the password back from AWS
-}
-```
-
-**Key Points:**
-- Password is set during creation
-- AWS doesn't return the password in API responses
-- Terraform state doesn't contain the password
-- If you change the password, Terraform won't detect drift
-
-#### Example 2: IAM User Login Profile Password
-
-```hcl
-resource "aws_iam_user" "developer" {
-  name = "developer"
-}
-
-resource "aws_iam_user_login_profile" "developer" {
-  user    = aws_iam_user.developer.name
-  pgp_key = "keybase:username"  # For encryption
-  
-  # password is write-only - cannot be read back
-  # Terraform generates a random password if not specified
-}
-```
-
-**Key Points:**
-- Password is encrypted with PGP key
-- Cannot read plaintext password back
-- Password is not in state file
-
-#### Example 3: Secrets Manager Secret Value
-
-```hcl
-resource "aws_secretsmanager_secret" "api_key" {
-  name = "api-key"
-}
-
-resource "aws_secretsmanager_secret_version" "api_key" {
-  secret_id = aws_secretsmanager_secret.api_key.id
-  
-  # secret_string is write-only
-  # AWS encrypts and stores it, but doesn't return plaintext
-  secret_string = var.api_key  # Sensitive, write-only
-}
-```
-
-**Key Points:**
-- Secret value is encrypted at rest
-- Cannot read plaintext value back
-- Use data source to read if needed (with proper permissions)
-
----
-
-## 4. Handling Ephemeral Values
-
-### Strategy 1: Don't Store in State
-
-For values that change frequently or are temporary:
-
-```hcl
-# ❌ BAD - Storing ephemeral token in state
-resource "aws_instance" "web" {
-  ami           = var.ami_id
-  instance_type = "t3.micro"
-  
-  user_data = base64encode(templatefile("script.sh", {
-    # This token changes every hour - shouldn't be in state
-    api_token = var.temporary_token  # Ephemeral!
-  }))
-}
-
-# ✅ GOOD - Generate token at runtime
-resource "aws_instance" "web" {
-  ami           = var.ami_id
-  instance_type = "t3.micro"
-  
-  user_data = base64encode(templatefile("script.sh", {
-    # Token fetched at runtime, not stored in state
-    token_endpoint = "https://api.example.com/token"
-  }))
-}
-```
-
-### Strategy 2: Use External Data Sources
-
-For values that need to be fetched but shouldn't persist:
-
-```hcl
-# Fetch temporary credentials at plan/apply time
-data "external" "temporary_credentials" {
-  program = ["bash", "-c", "aws sts get-session-token --output json"]
-}
-
-resource "aws_instance" "web" {
-  ami           = var.ami_id
-  instance_type = "t3.micro"
-  
-  # Use credentials immediately, don't store in state
-  # Note: This is just an example - use IAM roles in practice
-}
-```
-
-**Note:** In practice, use IAM roles instead of temporary credentials in Terraform.
-
-### Strategy 3: Mark as Sensitive
-
-For values that must be used but shouldn't be displayed:
+Ephemeral has a specific Terraform meaning: the value is excluded from saved plan and state files. Mark an input explicitly:
 
 ```hcl
 variable "db_password" {
-  description = "Database password"
+  description = "Database password supplied for this operation"
   type        = string
-  sensitive   = true  # Hides from output
-}
-
-resource "aws_db_instance" "main" {
-  password = var.db_password  # Write-only, sensitive
-  
-  # Password is not in state, not in logs, not in outputs
+  sensitive   = true
+  ephemeral   = true
 }
 ```
 
----
+Expressions derived from ephemeral values remain ephemeral, including locals. Supported destinations include other ephemeral inputs and child module outputs, ephemeral resources, provider configuration, write-only arguments, and provisioner/connection blocks. Ordinary persisted resource arguments, root module outputs, and instance keys for `count`/`for_each` cannot use ephemeral values.
+
+An ephemeral resource uses a separate block and reference namespace:
+
+```hcl
+# Fragment requiring a supporting hashicorp/random provider.
+ephemeral "random_password" "db" {
+  length  = 24
+  special = false
+}
+
+# Reference in a compatible context:
+# ephemeral.random_password.db.result
+```
+
+Unlike `resource "random_password"`, this block does not retain the generated password in state. Capture a generated password that must survive the run in an external secret store through a write-only argument.
+
+## 3. Write-Only Arguments
+
+The provider schema determines which arguments are write-only:
+
+| AWS resource | Ordinary argument (stored in state) | Write-only alternative |
+|--------------|-------------------------------------|------------------------|
+| `aws_db_instance` | `password` | `password_wo` |
+| `aws_secretsmanager_secret_version` | `secret_string` | `secret_string_wo` |
+
+Write-only arguments accept ordinary or ephemeral values, but cannot remove copies persisted elsewhere. For example, an ordinary Secrets Manager data source can retain a secret in state even when its result is passed to `password_wo`.
+
+Terraform cannot compare the previous write-only value with a new one. Providers commonly expose a separate persistent version argument, such as `password_wo_version`, to request an update. Change the secret and increment its version together; follow the selected provider's documented behavior.
+
+## 4. Handling Ephemeral Values
+
+### Supply a secret for each operation
+
+When applying a saved plan, supply required ephemeral inputs again because the plan does not retain them. Their values can differ between planning and applying. Use a secure input mechanism and avoid putting literal secrets in shell history.
+
+### Retrieve secrets ephemerally where supported
+
+```hcl
+# Fragment: secret exists, db_secret_arn is declared, and the AWS provider
+# supports this ephemeral resource.
+ephemeral "aws_secretsmanager_secret_version" "db" {
+  secret_id = var.db_secret_arn
+}
+
+# In an aws_db_instance block:
+# password_wo         = ephemeral.aws_secretsmanager_secret_version.db.secret_string
+# password_wo_version = var.db_password_version
+```
+
+The ordinary `data "aws_secretsmanager_secret_version"` block persists results in state. `data "external"` does too; it is not a mechanism for keeping temporary credentials out of state.
+
+### Keep secrets out of ordinary arguments
+
+An ephemeral secret cannot be embedded in ordinary EC2 `user_data`. Applications can instead retrieve secrets at runtime using an appropriate IAM role. Prefer supported provider authentication through environment credentials or workload identity when available.
 
 ## 5. Best Practices for Write-Only Arguments
 
-### ✅ Do's
+- Check the installed provider schema; do not infer support from an argument name or API behavior.
+- Combine `sensitive = true` and `ephemeral = true` for secret inputs.
+- Use a documented write-only destination throughout the secret's path.
+- Increment the matching version argument when intentionally updating a write-only value.
+- Protect historical state versions and backups; switching arguments does not erase earlier copies.
 
-1. **Use sensitive variables:**
-   ```hcl
-   variable "db_password" {
-     type      = string
-     sensitive = true
-   }
-   ```
-
-2. **Use external secret managers:**
-   ```hcl
-   data "aws_secretsmanager_secret" "db_password" {
-     name = "prod/database/password"
-   }
-   
-   data "aws_secretsmanager_secret_version" "db_password" {
-     secret_id = data.aws_secretsmanager_secret.db_password.id
-   }
-   
-   resource "aws_db_instance" "main" {
-     password = data.aws_secretsmanager_secret_version.db_password.secret_string
-   }
-   ```
-
-3. **Use PGP encryption for IAM passwords:**
-   ```hcl
-   resource "aws_iam_user_login_profile" "user" {
-     user    = aws_iam_user.user.name
-     pgp_key = "keybase:username"  # Encrypts password
-   }
-   ```
-
-4. **Document write-only arguments:**
-   ```hcl
-   resource "aws_db_instance" "main" {
-     # password is write-only - cannot be read back
-     # Changes to password require manual update or recreation
-     password = var.db_password
-   }
-   ```
-
-### ❌ Don'ts
-
-1. **Don't try to read write-only values:**
-   ```hcl
-   # ❌ BAD - This won't work
-   output "db_password" {
-     value = aws_db_instance.main.password  # Doesn't exist!
-   }
-   ```
-
-2. **Don't store passwords in plaintext:**
-   ```hcl
-   # ❌ BAD
-   variable "db_password" {
-     type    = string
-     default = "MyPassword123"  # Never hardcode!
-   }
-   ```
-
-3. **Don't commit secrets to version control:**
-   ```hcl
-   # ❌ BAD - Never commit .tfvars with secrets
-   # terraform.tfvars (committed to Git)
-   db_password = "MySecretPassword"
-   ```
-
-4. **Don't assume write-only values persist:**
-   ```hcl
-   # ❌ BAD - Password change won't be detected
-   resource "aws_db_instance" "main" {
-     password = var.db_password
-     # If password changes in AWS console, Terraform won't know
-   }
-   ```
-
----
+PGP encryption on an IAM login profile is a separate provider feature, not Terraform's write-only mechanism. With PGP configured, the encrypted password is still persisted. Consult the login profile resource documentation rather than assuming all password fields are absent from state.
 
 ## 6. Real-World Examples
 
-### Example 1: RDS Database with Secret Manager
+### Example 1: Store a supplied secret without recording its value
+
+This complete configuration can be initialized and validated without AWS credentials. A plan or apply needs credentials; applying creates an AWS secret and can incur charges. Review the plan in an isolated practice account first.
 
 ```hcl
-# Fetch password from Secrets Manager
-data "aws_secretsmanager_secret" "db_password" {
-  name = "prod/database/password"
+terraform {
+  required_version = "~> 1.12.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.92.0"
+    }
+  }
 }
 
-data "aws_secretsmanager_secret_version" "db_password" {
-  secret_id = data.aws_secretsmanager_secret.db_password.id
+provider "aws" {
+  region = "us-east-1"
 }
 
-resource "aws_db_instance" "main" {
-  identifier     = "prod-database"
-  engine         = "mysql"
-  instance_class = "db.t3.medium"
-  
-  # password is write-only - fetched from Secrets Manager
-  # Not stored in Terraform state
-  password = data.aws_secretsmanager_secret_version.db_password.secret_string
-  
-  # Username is readable, so it's in state
-  username = "admin"
-}
-
-# Cannot output password (write-only)
-output "db_endpoint" {
-  value = aws_db_instance.main.endpoint  # ✅ Readable
-}
-
-# output "db_password" {
-#   value = aws_db_instance.main.password  # ❌ Doesn't exist!
-# }
-```
-
-### Example 2: IAM User with Encrypted Password
-
-```hcl
-resource "aws_iam_user" "developer" {
-  name = "developer"
-}
-
-resource "aws_iam_user_login_profile" "developer" {
-  user    = aws_iam_user.developer.name
-  pgp_key = "keybase:developer"  # Encrypts password with PGP
-  
-  # Password is generated and encrypted
-  # Cannot read plaintext password back
-  # Password is not in state
-}
-
-# Can output encrypted password (for initial distribution)
-output "encrypted_password" {
-  value     = aws_iam_user_login_profile.developer.encrypted_password
+variable "api_key" {
+  type      = string
   sensitive = true
+  ephemeral = true
 }
 
-# Cannot output plaintext password (write-only)
-# output "password" {
-#   value = aws_iam_user_login_profile.developer.password  # ❌ Doesn't exist!
-# }
-```
+variable "api_key_version" {
+  description = "Increment when intentionally changing api_key"
+  type        = number
+  default     = 1
 
-### Example 3: Secrets Manager Secret
+  validation {
+    condition     = var.api_key_version >= 1 && floor(var.api_key_version) == var.api_key_version
+    error_message = "api_key_version must be a positive integer."
+  }
+}
 
-```hcl
 resource "aws_secretsmanager_secret" "api_key" {
-  name        = "api-key"
-  description = "API key for external service"
+  name_prefix = "terraform-study-api-key-"
 }
 
 resource "aws_secretsmanager_secret_version" "api_key" {
-  secret_id = aws_secretsmanager_secret.api_key.id
-  
-  # secret_string is write-only
-  # AWS encrypts and stores it
-  # Cannot read plaintext back (unless you have permissions)
-  secret_string = var.api_key  # Sensitive
-}
-
-# To read the secret later (with proper IAM permissions):
-data "aws_secretsmanager_secret_version" "api_key" {
-  secret_id = aws_secretsmanager_secret.api_key.id
-}
-
-# Use in other resources
-resource "aws_instance" "app" {
-  ami           = var.ami_id
-  instance_type = "t3.micro"
-  
-  user_data = base64encode(templatefile("app.sh", {
-    api_key = data.aws_secretsmanager_secret_version.api_key.secret_string
-  }))
+  secret_id                = aws_secretsmanager_secret.api_key.id
+  secret_string_wo         = var.api_key
+  secret_string_wo_version = var.api_key_version
 }
 ```
 
-### Example 4: Handling Password Changes
+The secret ID and version counter remain in state. The secret value does not. Secrets Manager stores the value outside Terraform and can return it to authorized callers.
+
+### Example 2: Send an ephemeral password to RDS
+
+This fragment assumes declared `db_password` (ephemeral), `db_password_version`, and `final_snapshot_identifier` inputs, plus a DB subnet group and security group. The AWS provider version above supports these write-only arguments.
 
 ```hcl
-# Problem: RDS password is write-only
-# If password changes outside Terraform, Terraform won't detect it
-# Solution: Use lifecycle ignore_changes or manage via Secrets Manager
-
 resource "aws_db_instance" "main" {
-  identifier = "prod-database"
-  engine     = "mysql"
-  password   = var.db_password  # Write-only
-  
-  lifecycle {
-    # Option 1: Ignore password changes (if managed externally)
-    ignore_changes = [password]
-    
-    # Option 2: Force replacement on password change
-    # replace_triggered_by = [var.db_password]
-  }
-}
+  identifier_prefix      = "terraform-study-"
+  engine                 = "mysql"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  username               = "admin"
+  db_subnet_group_name    = aws_db_subnet_group.main.name
+  vpc_security_group_ids  = [aws_security_group.db.id]
+  publicly_accessible    = false
 
-# Better approach: Use Secrets Manager rotation
-resource "aws_secretsmanager_secret" "db_password" {
-  name = "prod/database/password"
-}
+  password_wo         = var.db_password
+  password_wo_version = var.db_password_version
 
-resource "aws_secretsmanager_secret_rotation" "db_password" {
-  secret_id           = aws_secretsmanager_secret.db_password.id
-  rotation_lambda_arn = aws_lambda_function.rotate_password.arn
-  
-  rotation_rules {
-    automatically_after_days = 30
-  }
+  skip_final_snapshot       = false
+  final_snapshot_identifier = var.final_snapshot_identifier
 }
 ```
 
----
+Do not also set `password`. Increment `password_wo_version` to request a password update. RDS-managed master credentials through `manage_master_user_password` offer another approach, with their own argument conflicts.
 
 ## 7. Ephemeral Values in State Management
 
-### Understanding State File Contents
+| Value | Persisted by Terraform? |
+|-------|-------------------------|
+| Ordinary RDS `password` | Yes, even if sensitive |
+| Ordinary Secrets Manager `secret_string` | Yes |
+| Ordinary secret data source result | Yes |
+| Ephemeral variable/resource value | No |
+| Write-only `password_wo` / `secret_string_wo` value | No |
+| Version counter and resource identifiers | Yes |
 
-```hcl
-# State file contains:
-{
-  "resources": [
-    {
-      "type": "aws_db_instance",
-      "name": "main",
-      "instances": [
-        {
-          "attributes": {
-            "id": "prod-database",
-            "username": "admin",        # ✅ Stored (readable)
-            "password": null,            # ❌ Not stored (write-only)
-            "endpoint": "db.example.com" # ✅ Stored (readable)
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-### What Gets Stored vs What Doesn't
-
-| Attribute Type | Stored in State? | Example |
-|----------------|------------------|---------|
-| **Readable attributes** | ✅ Yes | `instance_id`, `arn`, `public_ip` |
-| **Write-only arguments** | ❌ No | `password`, `secret_string` |
-| **Sensitive ephemeral** | ❌ No | Temporary tokens, session keys |
-| **Computed attributes** | ✅ Yes | `id`, `arn` (after creation) |
-
----
+Omission applies to Terraform state and plan files, not the destination service or every provider log. Terraform cannot detect an out-of-band password change when the remote API does not return that password; this is separate from whether the configured password was stored in state.
 
 ## 8. Exam-Style Practice Questions
 
 ### Question 1
-What is a write-only argument in Terraform?
-A) An argument that can only be read, not written
-B) An argument that can be set but cannot be read back from the provider
-C) An argument that is optional
-D) An argument that must be provided
+What defines a Terraform write-only argument?
+
+A) The remote API never returns the field
+B) The provider declares it write-only, so Terraform omits its value from state and plan files
+C) Its name contains `password`
+D) Its input variable is sensitive
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Write-only arguments can be set during resource creation but cannot be read back from the provider API. Examples include passwords and secrets.
+Answer: **B** - Provider schema support is required. An API not returning a value does not prevent ordinary configured arguments from entering state.
 </details>
-
----
 
 ### Question 2
-Which of the following is an example of an ephemeral value that shouldn't be stored in Terraform state?
-A) EC2 instance ID
-B) RDS database endpoint
-C) Temporary AWS STS session token
-D) S3 bucket name
+Which declaration redacts normal output and omits an input from state and plan files?
+
+A) `sensitive = true` alone
+B) `nullable = false`
+C) `sensitive = true` and `ephemeral = true`
+D) A variable named `temporary_token`
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - Temporary session tokens are ephemeral values that change frequently and shouldn't be stored in state. Instance IDs, endpoints, and bucket names are persistent identifiers that should be stored.
+Answer: **C** - Redaction and non-persistence are separate behaviors.
 </details>
-
----
 
 ### Question 3
-You set a password for an RDS database instance. Can you read that password back from Terraform state?
-A) Yes, it's stored in the state file
-B) No, passwords are write-only arguments
-C) Only if you mark it as sensitive
-D) Only if you use a data source
+You configure `aws_db_instance.password` from an ordinary sensitive variable. Is the password stored in state?
+
+A) Yes
+B) No, all database passwords are write-only
+C) Only if sensitive is false
+D) Only when read through a data source
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - RDS database passwords are write-only arguments. They can be set during creation but cannot be read back from the AWS API, and therefore are not stored in Terraform state.
+Answer: **A** - The ordinary `password` argument is persisted. Use supported `password_wo` with an ephemeral source to avoid persisting the secret along that path.
 </details>
-
----
 
 ### Question 4
-What is the best practice for handling database passwords in Terraform?
-A) Store them in terraform.tfvars files
-B) Hardcode them in the configuration
-C) Use AWS Secrets Manager or mark as sensitive variables
-D) Store them in the state file
+Can a root module output expose an ephemeral value?
+
+A) Yes, if sensitive
+B) Yes, with `ephemeral = true`
+C) No; ephemeral outputs are supported only in child modules
+D) Yes, if retrieved from a secret manager
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - Best practice is to use AWS Secrets Manager to store passwords securely, or at minimum mark password variables as sensitive. Never hardcode or commit passwords to version control.
+Answer: **C** - Child module ephemeral outputs pass values into other compatible contexts. Root outputs cannot be ephemeral.
 </details>
-
----
 
 ### Question 5
-If you change an RDS database password in the AWS console, will Terraform detect the change?
-A) Yes, Terraform will detect it during the next plan
-B) No, passwords are write-only so Terraform cannot detect changes
-C) Only if you use ignore_changes lifecycle rule
-D) Only if the password is stored in Secrets Manager
+Why does `password_wo` have a `password_wo_version` argument?
+
+A) It encrypts state
+B) It supplies an update trigger because Terraform cannot compare previous and new write-only passwords
+C) It reveals the old password
+D) It detects all password changes in the AWS console
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Since passwords are write-only arguments, Terraform cannot read the current password value from AWS. Therefore, it cannot detect if the password was changed outside of Terraform. You would need to update the Terraform configuration and apply to change the password.
+Answer: **B** - Increment the version to request an update. It does not reveal the secret or detect every external change.
 </details>
-
----
 
 ## 9. Key Takeaways
 
-- **Write-only arguments**: Can be set but cannot be read back from the provider (e.g., passwords, secrets).
-- **Ephemeral values**: Temporary or frequently changing data that shouldn't be stored in state (e.g., session tokens).
-- **Security**: Write-only and ephemeral values are not stored in Terraform state, improving security.
-- **Best practices**: 
-  - Use AWS Secrets Manager for sensitive values
-  - Mark sensitive variables with `sensitive = true`
-  - Never hardcode or commit secrets to version control
-  - Use PGP encryption for IAM user passwords
-- **Limitations**: Terraform cannot detect changes to write-only arguments made outside of Terraform.
-- **State file**: Write-only arguments appear as `null` or are omitted from state files.
-- **Drift detection**: Changes to write-only arguments won't be detected during `terraform plan`.
-
----
+- Sensitive redacts; ephemeral and write-only prevent persistence of supported values.
+- Ordinary `password`, `secret_string`, and secret data sources can contain secrets in state.
+- Ephemeral values can flow only into compatible contexts.
+- Write-only arguments and update triggers are provider-specific.
+- Review the whole value path and protect historical state.
 
 ## References
 
-- [Terraform Sensitive Variables](https://developer.hashicorp.com/terraform/language/values/variables#suppressing-values-in-cli-output)
-- [AWS RDS Password Management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.html)
-- [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/)
-- [Terraform State Security](https://developer.hashicorp.com/terraform/language/state/sensitive-data)
-
+- [Manage sensitive data and version requirements](https://developer.hashicorp.com/terraform/language/manage-sensitive-data)
+- [Ephemeral resources](https://developer.hashicorp.com/terraform/language/manage-sensitive-data/ephemeral)
+- [Write-only arguments](https://developer.hashicorp.com/terraform/language/manage-sensitive-data/write-only)
+- [AWS provider 5.92: RDS instance](https://registry.terraform.io/providers/hashicorp/aws/5.92.0/docs/resources/db_instance)
+- [AWS provider 5.92: Secrets Manager secret version](https://registry.terraform.io/providers/hashicorp/aws/5.92.0/docs/resources/secretsmanager_secret_version)
+- [AWS provider 5.92: ephemeral secret version](https://registry.terraform.io/providers/hashicorp/aws/5.92.0/docs/ephemeral-resources/secretsmanager_secret_version)
+- [AWS provider: IAM user login profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user_login_profile)

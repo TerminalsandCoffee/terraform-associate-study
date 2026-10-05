@@ -1,0 +1,32 @@
+name: Study guide checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check examples and Git helper (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.12.2'
+          terraform_wrapper: false
+      - name: Check Markdown links and HCL syntax
+        run: python Scripts/check-study-guide.py
+      - name: Test Git helper in local temporary repositories
+        run: python -m unittest discover -s Scripts/tests -v

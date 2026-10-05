@@ -1,5 +1,7 @@
 # For Each Vs Count
 
+The resource examples are independent illustrative fragments: supply provider configuration and any omitted required arguments before running them. AMI IDs are placeholders. Blocks marked as errors deliberately show invalid configurations.
+
 ## Learning Objectives
 - Understand when to use `for_each` vs `count` to create multiple resource instances.
 - Learn the key differences, limitations, and best practices for each.
@@ -12,7 +14,7 @@
 
 Terraform provides two meta-arguments to create multiple instances of a resource:
 - **`count`**: Creates resources based on a number
-- **`for_each`**: Creates resources based on a map or set
+- **`for_each`**: Creates resources based on a map or set of strings
 
 Both serve similar purposes but have different use cases and behaviors.
 
@@ -67,7 +69,7 @@ resource "aws_elb" "web" {
 
 ❌ **Not ideal for:**
 - Resources that need unique names/identifiers
-- When you might need to remove middle items (causes recreation)
+- When you remove middle elements from a list used to configure instances (shifts values at later indices)
 - Maps or sets of items with unique keys
 
 ---
@@ -101,19 +103,19 @@ resource "aws_instance" "web" {
 ### Basic Syntax (with Set)
 
 ```hcl
-variable "regions" {
+variable "environments" {
   type    = set(string)
-  default = ["us-east-1", "us-west-2", "eu-west-1"]
+  default = ["dev", "staging", "prod"]
 }
 
 resource "aws_s3_bucket" "logs" {
-  for_each = var.regions
+  for_each = var.environments
   
-  bucket = "logs-${each.value}"
-  
-  provider = aws.region[each.value]
+  bucket_prefix = "logs-${each.value}-"
 }
 ```
+
+All buckets use the same configured AWS provider region. Provider aliases are static references; `provider = aws.region[each.value]` is invalid.
 
 **With sets:**
 - `each.key` = the set element value
@@ -158,10 +160,10 @@ resource "aws_elb" "web" {
 
 | Feature | `count` | `for_each` |
 |---------|---------|------------|
-| **Input Type** | Number | Map or Set |
+| **Input Type** | Nonnegative whole number | Map or set of strings |
 | **Resource Address** | `resource[0]`, `resource[1]` | `resource["key"]` |
 | **Index Access** | `count.index` | `each.key`, `each.value` |
-| **Removing Middle Item** | Recreates all items after it | Only affects that specific item |
+| **Removing Middle Item** | List-derived arguments shift at later indices; may update or replace instances | Removes that key without shifting other addresses |
 | **Order Matters** | ✅ Yes | ❌ No |
 | **Use with Maps** | ❌ No (convert to list) | ✅ Yes |
 | **Use with Sets** | ❌ No | ✅ Yes |
@@ -232,15 +234,17 @@ resource "aws_instance" "web" {
 ### Pitfall 1: Removing Middle Item with `count`
 
 ```hcl
-# Initial: count = 3 creates [0], [1], [2]
-# Change to: count = 2
-# Result: [0] stays, [1] becomes new [1] (was [2]), [2] destroyed
-# Old [1] is destroyed even though you only wanted to remove [2]
+# Given names = ["a", "b", "c"] and name = var.names[count.index]:
+# Removing "b" changes names to ["a", "c"].
+# Index [1] changes its name from "b" to "c"; index [2] is destroyed.
+# Whether [1] updates in place or is replaced depends on the resource schema.
+# Simply reducing count from 3 to 2, with other arguments unchanged,
+# destroys [2] and leaves [0] and [1] at their existing addresses.
 ```
 
 **Solution:** Use `for_each` if you need to remove specific items.
 
-### Pitfall 2: `for_each` Requires Map or Set
+### Pitfall 2: `for_each` Requires a Map or Set of Strings
 
 ```hcl
 # ❌ This will ERROR
@@ -266,6 +270,8 @@ resource "aws_instance" "web" {
 
 **You must choose one or the other.**
 
+`count` must be known before remote operations. For `for_each`, the map keys or all set elements must be known and must not be sensitive or ephemeral, because they identify instances. Map values can contain values that are unknown until apply.
+
 ### Pitfall 4: Changing from `count` to `for_each`
 
 ```hcl
@@ -282,8 +288,20 @@ resource "aws_instance" "web" {
 }
 ```
 
-**This will cause Terraform to destroy old resources and create new ones.**  
-**Solution:** Use `terraform state mv` to migrate:
+**Without an address migration, Terraform plans to destroy the old addresses and create the new ones.** Use declarative `moved` blocks to preserve the existing instances:
+```hcl
+moved {
+  from = aws_instance.web[0]
+  to   = aws_instance.web["web-1"]
+}
+
+moved {
+  from = aws_instance.web[1]
+  to   = aws_instance.web["web-2"]
+}
+```
+
+Alternatively, `terraform state mv` performs an immediate state migration. The following quoting is for a POSIX shell:
 ```bash
 terraform state mv 'aws_instance.web[0]' 'aws_instance.web["web-1"]'
 terraform state mv 'aws_instance.web[1]' 'aws_instance.web["web-2"]'
@@ -345,25 +363,33 @@ resource "aws_instance" "web" {
 
 ## 8. Real-World Examples
 
-### Example 1: Multi-Region Resources
+### Example 1: Multi-Region Resources with Static Providers
 
 ```hcl
-variable "regions" {
-  type = set(string)
-  default = ["us-east-1", "us-west-2", "eu-west-1"]
+provider "aws" {
+  alias  = "east"
+  region = "us-east-1"
 }
 
-resource "aws_s3_bucket" "logs" {
-  for_each = var.regions
-  
-  bucket = "company-logs-${each.value}"
-  
-  # Use provider alias for each region
-  provider = aws.region[each.value]
+provider "aws" {
+  alias  = "west"
+  region = "us-west-2"
+}
+
+resource "aws_s3_bucket" "east_logs" {
+  provider      = aws.east
+  for_each      = toset(["app", "audit"])
+  bucket_prefix = "east-${each.key}-"
+}
+
+resource "aws_s3_bucket" "west_logs" {
+  provider      = aws.west
+  for_each      = toset(["app", "audit"])
+  bucket_prefix = "west-${each.key}-"
 }
 ```
 
-**Why `for_each`?** Each bucket has unique name based on region key.
+Use separate resource or module blocks to select provider aliases statically. `for_each` creates multiple buckets within each selected region.
 
 ---
 
@@ -385,14 +411,22 @@ locals {
 
 resource "aws_security_group_rule" "ingress" {
   for_each = {
-    for sg_name, sg_config in local.security_groups :
-    sg_name => sg_config
+    for rule in flatten([
+      for sg_name, sg_config in local.security_groups : [
+        for port in sg_config.ports : {
+          key   = "${sg_name}-${port}"
+          group = sg_name
+          port  = port
+          cidr  = sg_config.cidr
+        }
+      ]
+    ]) : rule.key => rule
   }
   
   type              = "ingress"
-  security_group_id = aws_security_group.main[each.key].id
-  from_port         = each.value.ports[0]
-  to_port           = each.value.ports[0]
+  security_group_id = aws_security_group.main[each.value.group].id
+  from_port         = each.value.port
+  to_port           = each.value.port
   protocol          = "tcp"
   cidr_blocks       = [each.value.cidr]
 }
@@ -409,7 +443,7 @@ variable "enable_monitoring" {
   default = true
 }
 
-resource "aws_cloudwatch_alarm" "cpu" {
+resource "aws_cloudwatch_metric_alarm" "cpu" {
   count = var.enable_monitoring ? 1 : 0
   
   alarm_name = "high-cpu"
@@ -434,7 +468,9 @@ resource "aws_instance" "app" {
     if v.enabled
   }
   
-  # Only creates resources for enabled environments
+  # Only creates resources for enabled environments.
+  # All instances still use this block's statically selected provider;
+  # each.value.region does not choose a provider automatically.
 }
 ```
 
@@ -457,15 +493,15 @@ Answer: **B** - `count = 5` is the simplest for identical resources.
 ---
 
 ### Question 2
-What happens if you remove the middle item from a `count`-based resource list?
+What happens when resource arguments use `var.names[count.index]` and you remove a middle element of `var.names`?
 A) Only that item is removed
-B) All items after it are recreated
+B) Later indices receive shifted values and the last instance is destroyed; affected instances may update or be replaced
 C) Nothing happens
 D) All items are recreated
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - With `count`, removing a middle item causes all subsequent items to be recreated with new indices.
+Answer: **B** - Numeric addresses remain indexed, but the values assigned to them shift. Whether those changes cause replacement depends on the changed arguments and provider schema.
 </details>
 
 ---
@@ -473,13 +509,13 @@ Answer: **B** - With `count`, removing a middle item causes all subsequent items
 ### Question 3
 Which data types can be used with `for_each`?
 A) List and Map
-B) Set and Map only
+B) A set of strings or a map
 C) Number and List
 D) Any data type
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - `for_each` only accepts maps or sets. Lists must be converted using `toset()`.
+Answer: **B** - Resource and module `for_each` accepts maps or sets of strings. Convert a list of strings with `toset()`, which removes duplicates and ordering.
 </details>
 
 ---
@@ -540,11 +576,11 @@ Need to create multiple instances?
 
 - **`count`**: Use for a known number of identical resources. Creates indexed addresses `[0]`, `[1]`, etc.
 - **`for_each`**: Use for maps/sets with unique keys. Creates map-style addresses `["key"]`.
-- **`count` limitation**: Removing middle items causes recreation of subsequent items.
-- **`for_each` limitation**: Must use maps or sets, not plain lists.
+- **`count` limitation**: Removing middle list elements shifts argument values at later indices, potentially causing updates or replacements.
+- **`for_each` limitation**: Must use maps or sets of strings, not plain lists. Instance keys must be known, non-sensitive, and non-ephemeral.
 - **Cannot combine**: You can't use both `count` and `for_each` on the same resource.
 - **Conversion**: Lists can be converted to sets with `toset()` for `for_each`.
-- **Migration**: Changing from `count` to `for_each` requires state migration with `terraform state mv`.
+- **Migration**: Preserve instance identity when changing from `count` to `for_each` with `moved` blocks or `terraform state mv`.
 
 ---
 
@@ -553,4 +589,5 @@ Need to create multiple instances?
 - [Terraform count Meta-Argument](https://developer.hashicorp.com/terraform/language/meta-arguments/count)
 - [Terraform for_each Meta-Argument](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each)
 - [When to Use `for_each` Instead of `count`](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each#when-to-use-for_each-instead-of-count)
-
+- [Provider meta-argument](https://developer.hashicorp.com/terraform/language/meta-arguments/provider)
+- [Refactor modules with moved blocks](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring)

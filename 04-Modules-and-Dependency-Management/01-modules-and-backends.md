@@ -128,6 +128,8 @@ terraform output vpc_id
 
 ## 7. Module Example (End-to-End)
 
+Use a globally unique bucket name and AWS credentials for a sandbox account. Each module should declare its provider requirements; the root configures the provider.
+
 **Folder structure:**
 
 ```
@@ -143,6 +145,15 @@ terraform-associate-study/
 **s3_bucket/main.tf:**
 
 ```hcl
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_s3_bucket" "this" {
   bucket = var.bucket_name
   tags = {
@@ -177,6 +188,16 @@ output "bucket_arn" {
 **main.tf (root):**
 
 ```hcl
+terraform {
+  required_version = ">= 1.12, < 2.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 provider "aws" {
   region = "us-east-1"
 }
@@ -196,7 +217,8 @@ Run:
 
 ```bash
 terraform init
-terraform apply -auto-approve
+terraform plan
+terraform apply
 ```
 
 ---
@@ -208,20 +230,22 @@ It determines how state is loaded, stored, and locked during operations.
 
 Without a backend, Terraform defaults to a **local backend** — `terraform.tfstate` in your working directory.
 
-You can configure a **remote backend** for shared, secure state (e.g., AWS S3, Terraform Cloud).
+You can configure a backend for remote state storage (e.g., AWS S3), or use HCP Terraform for managed state and remote runs.
 
 ---
 
-## 9. Backend Example (S3 + DynamoDB)
+## 9. Backend Example (S3 Native Locking)
+
+Create the state bucket first, enable versioning, and restrict access. S3 locking is opt-in; Terraform 1.10+ supports `use_lockfile`. DynamoDB-based locking is deprecated. See the [S3 backend reference](https://developer.hashicorp.com/terraform/language/backend/s3).
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "terraform-study-state"
-    key            = "network/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "state-locking"
-    encrypt        = true
+    bucket       = "terraform-study-state"
+    key          = "network/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }
 ```
@@ -231,7 +255,7 @@ terraform {
 * `bucket`: where the state file is stored
 * `key`: path within the bucket
 * `region`: AWS region
-* `dynamodb_table`: optional — adds state locking
+* `use_lockfile = true`: enables native S3 state locking; grant read, write, and delete permissions on the `.tflock` object
 * `encrypt = true`: enables SSE encryption at rest
 
 Run:
@@ -240,7 +264,7 @@ Run:
 terraform init
 ```
 
-Terraform will migrate or set up your remote state automatically.
+For a new configuration, `init` initializes the backend. For existing state, follow the migration steps below and review any copy prompt.
 
 ---
 
@@ -250,7 +274,7 @@ If you initially used a **local state**, and then add a backend block, Terraform
 
 > "Do you want to copy your existing state to the new backend?"
 
-Always say **yes** to migrate the existing resources safely.
+Confirm the destination bucket/key and back up the current state before approving the copy. Only approve when this is the intended destination for those resources.
 
 You can also migrate manually with:
 
@@ -266,10 +290,10 @@ Common backend types and their use cases:
 
 | Backend                          | Use Case                                       | Supports Locking? |
 | -------------------------------- | ---------------------------------------------- | ----------------- |
-| **local**                        | Simple, single-user local files                | ❌ No              |
-| **s3**                           | Team collaboration via AWS S3 + DynamoDB       | ✅ Yes             |
-| **terraform cloud / enterprise** | Managed remote state with workspace automation | ✅ Yes             |
-| **azurerm / gcs / consul**       | Platform-specific remote storage               | ✅ Varies          |
+| **local**                        | Local files with operating-system file locks   | ✅ Yes, on the local system |
+| **s3**                           | Team collaboration via AWS S3                  | ✅ Opt-in with `use_lockfile` |
+| **HCP Terraform / Enterprise**  | Managed state and workspace runs (`cloud` integration) | ✅ Yes |
+| **azurerm / gcs / consul**      | Platform-specific remote storage               | ✅ Yes |
 
 ---
 
@@ -278,8 +302,8 @@ Common backend types and their use cases:
 * Backends are configured in the **terraform block**, not the provider block.
 * Backend settings **can’t use variables** or `count/for_each`.
 * `terraform init` is required after any backend change.
-* Backends store **only state**, not configuration.
-* Terraform never includes backend credentials in state files.
+* Backends manage state storage and locking; some also support remote operations. Terraform uses the `cloud` block to connect to HCP Terraform and cannot combine it with a `backend` block.
+* Backend credentials supplied in configuration or `-backend-config` can be written to `.terraform/terraform.tfstate` (local backend metadata) and saved plan files. Supply credentials through environment variables or the backend's credential chain. See [backend credentials and sensitive data](https://developer.hashicorp.com/terraform/language/backend#credentials-and-sensitive-data).
 
 ---
 
@@ -345,7 +369,7 @@ Answer: **B** - The `required_providers` block declares provider dependencies an
 * **Modules** group resources and make Terraform reusable, maintainable, and modular.
 * **Inputs** pass data *into* a module; **outputs** pass data *out*.
 * **Backends** control *where* Terraform stores state (local vs remote).
-* **Remote backends (S3 + DynamoDB)** provide collaboration, encryption, and locking.
+* **S3 state storage** supports collaboration, encryption, and opt-in native locking with `use_lockfile = true`.
 * Backend config is static — cannot depend on variables.
 * Together, modules and backends form the foundation of scalable Terraform architecture.
 
@@ -357,3 +381,4 @@ Answer: **B** - The `required_providers` block declares provider dependencies an
 * [Terraform Backends Documentation](https://developer.hashicorp.com/terraform/language/settings/backends)
 * [Terraform Registry - AWS Modules](https://registry.terraform.io/namespaces/terraform-aws-modules)
 * [AWS Backend Example (S3)](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
+* [Local Backend Locking](https://developer.hashicorp.com/terraform/language/backend/local)

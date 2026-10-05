@@ -23,17 +23,17 @@
 - Private module registry
 - VCS integration (GitHub, GitLab, etc.)
 
-**HCP Terraform Enterprise** (formerly Terraform Enterprise) is the self-hosted version with the same features, deployed in your infrastructure.
+**Terraform Enterprise** is the self-hosted distribution, deployed and operated in your infrastructure. Its name remains Terraform Enterprise. Features depend on the product edition and, for Enterprise, the installed release. See the [Terraform Enterprise overview](https://developer.hashicorp.com/terraform/enterprise).
 
-**Note:** HCP Terraform is the new name for Terraform Cloud. The functionality remains the same, but the branding has been updated to align with HashiCorp Cloud Platform (HCP).
+**Note:** Terraform Cloud was renamed HCP Terraform. Product features continue to evolve; check the current documentation and your organization's entitlements.
 
 ### Key Differences from CLI
 
 | Feature | Terraform CLI | HCP Terraform |
 |---------|---------------|-----------------|
 | **State Storage** | Local file or S3/GCS backend | Managed remote state |
-| **Execution** | Local machine | Remote runners |
-| **Workspaces** | Local workspaces | HCP Terraform workspaces (different concept) |
+| **Execution** | Executes locally or initiates remote runs | Remote, agent, or local execution mode |
+| **Workspaces** | Named states in one working directory/backend | State, configuration, variables, settings, and run history |
 | **Organization** | Manual | Projects for grouping workspaces |
 | **Collaboration** | Manual (S3 + locking) | Built-in team features |
 | **Policy** | Manual review | Automated Sentinel policies |
@@ -53,14 +53,14 @@ terraform workspace new dev
 terraform workspace select dev
 ```
 - Multiple state files for same configuration
-- Used for environment separation
+- Useful for similar deployments; not an access-control boundary
 - Local or remote backend
 
 #### HCP Terraform Workspaces
-- Separate configuration per workspace
+- Each workspace has its own configuration association; multiple workspaces can use the same repository/configuration
 - Independent state files
 - Separate variables and settings
-- Managed through UI or API
+- Managed through UI, API, or supported CLI integration
 - Organized into Projects
 
 ### HCP Terraform Workspace Features
@@ -77,10 +77,10 @@ terraform workspace select dev
 - Terraform variables
 - Sensitive variable masking
 
-**3. Run Triggers:**
-- VCS-driven runs (on commit)
-- API-triggered runs
-- Scheduled runs
+**3. Ways to initiate runs:**
+- VCS-driven runs for configured repository changes
+- API-, UI-, or CLI-driven runs
+- Run triggers that queue downstream workspaces after successful upstream applies
 
 **4. Run Management:**
 - Plan and apply in UI
@@ -95,14 +95,14 @@ terraform workspace select dev
 2. Connect VCS (GitHub/GitLab)
 3. Set workspace variables
 4. Configure run triggers
-5. Assign to a Project (optional)
+5. Choose a Project (otherwise the workspace belongs to the default project)
 
-**Or via API:**
+**Connect the Terraform CLI with a `cloud` block:**
 ```hcl
 terraform {
   cloud {
     organization = "my-org"
-    
+
     workspaces {
       name = "production"
     }
@@ -110,7 +110,7 @@ terraform {
 }
 ```
 
-**Note:** In HCP Terraform workspaces, you don't define backend blocks - HCP Terraform handles state automatically.
+Run `terraform login` and `terraform init` to initialize CLI integration. A `cloud` block and a `backend` block are mutually exclusive. This HCL is CLI configuration, not an API request. See [CLI-driven runs](https://developer.hashicorp.com/terraform/cloud-docs/run/cli).
 
 ---
 
@@ -123,7 +123,7 @@ terraform {
 - **Organization**: Group workspaces by team, application, or environment
 - **Access Control**: Apply team permissions at the project level
 - **Policy Sets**: Assign Sentinel policies to projects
-- **Cost Management**: Track costs across project workspaces
+- **Shared Variables**: Scope variable sets to related workspaces
 - **Visual Organization**: Better workspace management in the UI
 
 ### Project Structure
@@ -171,12 +171,12 @@ curl \
 **2. Policy Sets:**
 - Assign Sentinel policy sets to projects
 - All workspaces in project inherit policies
-- Override at workspace level if needed
+- Review policy-set scope and exclusions; an individual workspace does not automatically override inherited policies
 
-**3. Cost Tracking:**
-- View cost estimates across project workspaces
-- Track spending by project
-- Budget alerts per project
+**3. Variable Sets:**
+- Share common variables across project workspaces
+- Review variable precedence and permissions before reusing credentials
+- Use workspace-specific values for settings that differ
 
 **4. Workspace Organization:**
 - Filter workspaces by project
@@ -190,10 +190,10 @@ curl \
 terraform {
   cloud {
     organization = "my-org"
-    
+
     workspaces {
-      tags = ["production", "web"]
-      # Workspace will be in "Production" project
+      project = "Production"
+      tags    = ["production", "web"]
     }
   }
 }
@@ -205,19 +205,21 @@ terraform {
 - Use consistent naming conventions
 - Apply policies at project level when possible
 
+Tags match workspace labels; they do not infer project membership. `project` names the project explicitly. See [cloud workspace settings](https://developer.hashicorp.com/terraform/language/terraform#workspaces) and [organizing workspaces with projects](https://developer.hashicorp.com/terraform/tutorials/cloud/projects).
+
 ---
 
 ## 4. Remote Execution (Runs)
 
 ### How Runs Work
 
-**Run** = A single execution of `terraform plan` or `terraform apply` in HCP Terraform.
+**Run** = A workflow that includes planning, configured checks, and potentially applying the resulting plan. Speculative plans cannot be applied.
 
 **Types of runs:**
 1. **VCS-driven:** Triggered by commits to connected repository
 2. **API-triggered:** Created via API
 3. **UI-triggered:** Manual runs from HCP Terraform UI
-4. **CLI-driven:** `terraform plan/apply` queued to HCP Terraform (if configured)
+4. **CLI-driven:** `terraform plan` queues a speculative run; remote `terraform apply` is available for workspaces without a linked VCS repository
 
 ### Run Workflow
 
@@ -253,7 +255,8 @@ terraform {
 **Auto-apply** automatically applies plans that pass:
 - Can be enabled per workspace
 - Useful for development environments
-- Should be disabled for production
+- Commonly disabled when production requires explicit approval
+- Does not allow applying speculative pull-request plans or bypassing mandatory policy checks
 
 ---
 
@@ -265,61 +268,56 @@ terraform {
 
 **Policy types:**
 - **Hard mandatory:** Blocks run if violated
-- **Soft mandatory:** Warns but allows override
+- **Soft mandatory:** Blocks apply unless a user with override permission explicitly overrides the failure
 - **Advisory:** Only warnings
 
 ### Common Policy Examples
 
 #### Policy 1: Restrict Instance Types
 
-```python
-import "tfplan"
+```sentinel
+import "tfplan/v2" as tfplan
 
 allowed_types = ["t2.micro", "t3.micro", "t3.small"]
 
 main = rule {
-  all tfplan.resource_changes as _, rc {
-    rc.type is not "aws_instance" or
-    rc.change.after.instance_type in allowed_types
-  }
+	all tfplan.resource_changes as _, rc {
+		rc.mode is not "managed" or
+			rc.type is not "aws_instance" or
+			rc.change.actions is ["delete"] or
+			(rc.change.after.instance_type else "") in allowed_types
+	}
 }
 ```
 
-**What it does:** Only allows specific EC2 instance types.
+**What it does:** Checks planned managed EC2 instances, ignoring deletion-only changes. Unknown or missing instance types fail this check. Test policy fragments with mocks for creates, updates, replacements, deletions, and unknown values before enforcement.
 
 #### Policy 2: Require Tags
 
-```python
-import "tfplan"
+```sentinel
+import "tfplan/v2" as tfplan
 
 required_tags = ["Environment", "Project", "ManagedBy"]
 
 main = rule {
-  all tfplan.resource_changes as _, rc {
-    rc.type is "aws_instance" implies
-    all required_tags as tag {
-      tag in rc.change.after.tags
-    }
-  }
+	all tfplan.resource_changes as _, rc {
+		rc.mode is not "managed" or
+			rc.type is not "aws_instance" or
+			rc.change.actions is ["delete"] or
+			((rc.change.after.tags_all else null) is not null and all required_tags as tag {
+				tag in (rc.change.after.tags_all else {})
+			})
+	}
 }
 ```
 
-**What it does:** Ensures all EC2 instances have required tags.
+**What it does:** Checks required tag keys on planned managed EC2 instances, including provider default tags via `tags_all`. This checks key presence, not allowed tag values.
 
 #### Policy 3: Prevent Public S3 Buckets
 
-```python
-import "tfplan"
+The AWS provider models bucket-level public access protection as a separate `aws_s3_bucket_public_access_block` resource, not a nested attribute on `aws_s3_bucket`. A complete policy must associate each bucket with its block resource and check all four settings: `block_public_acls`, `ignore_public_acls`, `block_public_policy`, and `restrict_public_buckets`. It must also handle missing controls and planned deletions. Checking only block resources that happen to exist would miss unprotected buckets.
 
-main = rule {
-  all tfplan.resource_changes as _, rc {
-    rc.type is not "aws_s3_bucket" or
-    rc.change.after.public_access_block_config[0].block_public_acls is true
-  }
-}
-```
-
-**What it does:** Prevents creation of publicly accessible S3 buckets.
+Use [the AWS public access block resource schema](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) and [the `tfplan/v2` import reference](https://developer.hashicorp.com/terraform/cloud-docs/policy-enforcement/sentinel/import/tfplan-v2) when designing and testing this policy.
 
 ### When Policies Run
 
@@ -371,9 +369,9 @@ terraform-aws-vpc/
 
 ```hcl
 module "vpc" {
-  source = "app.terraform.io/my-org/aws-vpc/aws"
+  source  = "app.terraform.io/my-org/aws-vpc/aws"
   version = "1.0.0"
-  
+
   cidr_block = "10.0.0.0/16"
 }
 ```
@@ -405,8 +403,9 @@ module "vpc" {
 - Pull request updates
 
 **Branch-based workspaces:**
-- Different workspace per branch
-- `terraform.workspace` maps to branch name
+- Workspaces can track different configured branches or working directories
+- `terraform.workspace` is a Terraform workspace identifier; it is not automatically the Git branch name
+- Pull-request plans are speculative; merges/pushes to the tracked branch can queue normal runs according to trigger settings
 
 ### VCS Configuration
 
@@ -436,9 +435,10 @@ HCP Terraform can estimate infrastructure costs for planned changes.
 - Cost changes from updates
 - Total estimated cost
 
-**Requires:**
-- Cost estimation API enabled
-- Workspace with cost estimation configured
+**Configuration and limits:**
+- Enable cost estimation in the organization's settings when available for its edition
+- Estimates cover supported resources and are not an actual cloud bill or a project budget guarantee
+- See [cost estimation](https://developer.hashicorp.com/terraform/cloud-docs/cost-estimation) for supported providers and limitations
 
 ---
 
@@ -474,13 +474,13 @@ HCP Terraform can estimate infrastructure costs for planned changes.
 ### Question 1
 What is the main difference between Terraform CLI workspaces and HCP Terraform workspaces?
 A) They are the same concept
-B) CLI workspaces are for environments, Cloud workspaces are separate configurations
+B) CLI workspaces separate states; HCP workspaces also hold configuration associations, variables, settings, and run history
 C) Cloud workspaces don't support state
 D) CLI workspaces are cloud-based
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - CLI workspaces use multiple state files for the same configuration (environment separation). HCP Terraform workspaces are separate configurations, each with their own state, variables, and settings.
+Answer: **B** - CLI workspaces share a working directory and backend configuration. HCP Terraform workspaces each have state, configuration, variables, and settings; they can reuse the same source configuration for different environments.
 </details>
 
 ---
@@ -528,7 +528,7 @@ Answer: **B** - Projects are used to organize and group related workspaces toget
 ## 11. Key Takeaways
 
 - **HCP Terraform** (formerly Terraform Cloud) provides managed remote state, remote execution, and collaboration features.
-- **HCP Terraform workspaces** are different from CLI workspaces - they're separate configurations, not environment variants.
+- **HCP Terraform workspaces** each have state, configuration, variables, settings, and runs; several may reuse the same configuration for different environments.
 - **Projects** organize workspaces into logical groups for better management, access control, and policy assignment.
 - **Sentinel** enforces Policy as Code, blocking or warning on policy violations.
 - **Private Module Registry** allows organizations to publish and version internal modules.
@@ -541,7 +541,8 @@ Answer: **B** - Projects are used to organize and group related workspaces toget
 ## References
 
 - [HCP Terraform Documentation](https://developer.hashicorp.com/terraform/cloud-docs)
-- [HCP Terraform Projects](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/projects)
+- [HCP Terraform Projects](https://developer.hashicorp.com/terraform/tutorials/cloud/projects)
+- [Policy set scope](https://developer.hashicorp.com/terraform/cloud-docs/policy-enforcement/manage-policy-sets)
 - [Sentinel Language](https://docs.hashicorp.com/sentinel/language/)
 - [Private Module Registry](https://developer.hashicorp.com/terraform/cloud-docs/registry)
 - [VCS-driven Workflow](https://developer.hashicorp.com/terraform/cloud-docs/run/ui)

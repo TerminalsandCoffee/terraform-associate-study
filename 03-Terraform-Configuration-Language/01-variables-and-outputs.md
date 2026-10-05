@@ -1,5 +1,7 @@
 # Variables And Outputs
 
+Examples that reference AWS resources or child modules are illustrative fragments unless all required configuration is shown. Supply provider requirements, credentials, networking, and valid regional AMI IDs before running an AWS example.
+
 ## Learning Objectives
 - Understand how **variables** make Terraform configurations reusable and dynamic.
 - Learn the different **variable types**, **defaults**, and **precedence**.
@@ -39,7 +41,7 @@ resource "aws_instance" "web" {
 }
 ```
 
-If no default is provided, Terraform will prompt you during plan or apply.
+If no default or other value is provided, Terraform prompts during an interactive plan or apply. With `-input=false`, a missing required variable produces an error.
 
 ---
 
@@ -56,34 +58,33 @@ Terraform supports multiple data types.
 | **map(string)**  | `{ region = "us-east-1", env = "dev" }`    | Key/value pairs            |
 | **object**       | `object({ name = string, size = number })` | Complex structure          |
 | **tuple**        | `[true, "t2.micro", 2]`                    | Fixed collection of values |
-| **set(string)**  | `set(["t2.micro", "t2.nano"])`             | Unique, unordered values   |
+| **set(string)**  | `toset(["t2.micro", "t2.nano"])`           | Unique, unordered values   |
 
 ---
 
 ## 4. Variable Precedence 
-Terraform reads variables from multiple sources.
-If the same variable is defined in multiple places, the following precedence order applies (highest → lowest):
+For a local Terraform CLI run, the following precedence order applies (highest → lowest). HCP Terraform workspace variables and variable sets have additional precedence rules.
 
 | Source                           | Example                                   | Priority   |
 | -------------------------------- | ----------------------------------------- | ---------- |
-| CLI flags                        | `terraform apply -var="region=us-west-1"` | 🥇 Highest |
-| `.tfvars` file passed explicitly | `terraform apply -var-file=prod.tfvars`   |            |
-| Environment variables            | `export TF_VAR_region=us-east-1`          |            |
-| Auto-loaded files                | `*.auto.tfvars`                           |            |
-| `terraform.tfvars`               | Auto-loaded default file                  |            |
+| `-var` and `-var-file` flags      | Processed in command-line order; later wins | 🥇 Highest |
+| Auto-loaded files                | `*.auto.tfvars` / `*.auto.tfvars.json`, later lexical filename wins | |
+| `terraform.tfvars.json`          | Auto-loaded JSON file                     |            |
+| `terraform.tfvars`               | Auto-loaded HCL file                      |            |
+| Environment variables            | `TF_VAR_region`                           |            |
 | Variable default in code         | `default = "us-east-1"`                   | 🥉 Lowest  |
 
 Example question (exam-style):
 
 A variable is defined in terraform.tfvars, as an environment variable, and in the variable block with a default. Which value will Terraform use?
 
-Answer: The environment variable (TF_VAR) value.
+Answer: The value in `terraform.tfvars`.
 
 ---
 
 ## 5. Sensitive Variable (Credentials/Passwords)
 
-Mark sensitive variables to prevent Terraform from displaying them in logs or outputs with the sensitive = true tag. 
+Set `sensitive = true` to redact values in normal Terraform plan/apply output. This is a display control, not encryption or a guarantee that every log or downstream program will hide the value.
 ```
 variable "db_password" {
   description = "Database password"
@@ -97,7 +98,7 @@ Outputs:
 
 db_password = (sensitive value)
 ```
-For true secrecy, store them securely (AWS Secrets Manager, Vault, etc.) and retrieve with data sources.
+Secret managers protect secrets at their source, but ordinary data sources can still put retrieved secrets in state. To omit supported values from state and plan files, use `ephemeral = true` and a compatible ephemeral context or write-only argument. See [Ephemeral Values and Write-Only Arguments](05-ephemeral-values-write-only.md).
 
 ---
 
@@ -141,7 +142,7 @@ output "db_password" {
   sensitive = true
 }
 ```
-This hides it in CLI output but still stores it in state.
+This redacts normal plan/apply output but still stores the value in state. `terraform output db_password`, `terraform output -raw db_password`, and `terraform output -json` can reveal sensitive output values.
 
 ---
 
@@ -151,8 +152,8 @@ Outputs are also how modules pass data between each other.
 
 Child module (vpc/main.tf):
 ```
-output "vpc_id" {
-  value = aws_vpc.main.id
+output "public_subnet_id" {
+  value = aws_subnet.public.id
 }
 ```
 Root Module: 
@@ -164,7 +165,7 @@ module "vpc" {
 resource "aws_instance" "web" {
   ami           = var.ami
   instance_type = var.instance_type
-  subnet_id     = module.vpc.vpc_id
+  subnet_id     = module.vpc.public_subnet_id
 }
 ```
 
@@ -204,10 +205,11 @@ output "public_ip" {
 ```
 Run: 
 ```bash
-terraform apply -var="ami=ami-0123456789abcdef0"
+terraform init
+terraform plan -var="ami=ami-0123456789abcdef0"
 ```
 
-**Note:** AMI IDs in examples are placeholders. In real deployments, use `data "aws_ami"` data sources to fetch the latest AMI IDs.
+**Note:** Replace the placeholder AMI ID with one compatible with your region and instance architecture. Add an AWS `required_providers` declaration; this example also assumes suitable default VPC networking. Review the plan before applying. A filtered `aws_ami` data source is another option, but automatically selecting the latest image can cause later replacement plans.
 ---
 
 ## 10. Best Practices
@@ -234,7 +236,7 @@ D) Terraform will prompt for input
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - Environment variables (TF_VAR_*) have higher precedence than .tfvars files and defaults. Precedence order: CLI flags > .tfvars > environment variables > defaults.
+Answer: **B** - `terraform.tfvars` overrides `TF_VAR_*` environment variables, which override variable defaults.
 </details>
 
 ---
@@ -248,7 +250,7 @@ D) Requires the value to be provided via secret manager
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - `sensitive = true` redacts the value from Terraform CLI output and logs, but the value is still stored in state. For true security, use external secret management.
+Answer: **C** - `sensitive = true` redacts normal plan/apply output, but does not prevent storage in state or plan files. Protect those files and use ephemeral values/write-only arguments where supported.
 </details>
 
 ---
@@ -275,9 +277,8 @@ Answer: **A** - Module outputs are accessed using `module.<module-name>.<output-
 - Outputs help share data between resources, modules, and users.
 - Together, variables + outputs make your Terraform code maintainable and scalable.
 
+## References
 
-
-
-
-
-
+- [Input variable values and precedence](https://developer.hashicorp.com/terraform/language/values/variables#assign-values-to-variables)
+- [Manage sensitive data](https://developer.hashicorp.com/terraform/language/manage-sensitive-data)
+- [terraform output command](https://developer.hashicorp.com/terraform/cli/commands/output)

@@ -22,7 +22,7 @@
 **Common flags:**
 ```bash
 terraform init                    # Standard initialization
-terraform init -upgrade           # Upgrade provider versions
+terraform init -upgrade           # Upgrade providers/modules within constraints
 terraform init -reconfigure      # Reconfigure backend without migration
 terraform init -migrate-state    # Migrate state to new backend
 ```
@@ -45,14 +45,14 @@ terraform plan                                    # Standard plan
 terraform plan -out=tfplan                       # Save plan to file
 terraform plan -var="instance_type=t3.large"     # Set variable
 terraform plan -var-file=prod.tfvars             # Use variable file
-terraform plan -target=aws_instance.web          # Plan specific resource only
+terraform plan -target=aws_instance.web          # Target resource and its dependencies
 terraform plan -refresh=false                    # Skip state refresh
-terraform plan -refresh-only                     # Only refresh state, don't plan changes
+terraform plan -refresh-only                     # Preview state/output updates only
 ```
 
 **Key differences:**
 - `plan -refresh=false`: Use cached state, faster but may miss drift
-- `plan -refresh-only`: Only update state from real infrastructure, don't plan changes
+- `plan -refresh-only`: Propose state and root output updates to reflect remote changes; do not modify infrastructure or persist the proposed state yet. Review and use `terraform apply -refresh-only` (or apply a saved refresh-only plan) to record them.
 
 **Exam tip:** `terraform plan -out=tfplan` saves the plan, then `terraform apply tfplan` applies it exactly as planned.
 
@@ -71,12 +71,12 @@ terraform apply -refresh=false            # Use cached state
 terraform apply -var="key=value"         # Pass variable
 ```
 
-**Exam tip:** `terraform apply -auto-approve` is useful in CI/CD pipelines.
+**Exam tip:** `terraform apply -auto-approve` skips the interactive approval. In CI/CD, protect deployment jobs and review the plan; applying a saved plan also proceeds without an approval prompt.
 
 ---
 
 ### `terraform destroy`
-**Purpose:** Destroys all resources managed by Terraform.
+**Purpose:** Plans and applies destruction of resources managed in the current configuration's selected workspace/state.
 
 **Common flags:**
 ```bash
@@ -135,7 +135,7 @@ resource "aws_instance" "web" {
 - Reference errors
 - Provider configuration issues
 
-**Note:** Does NOT check if resources exist in the cloud or if your credentials are valid.
+**Note:** Does NOT check if resources exist in the cloud or if your credentials are valid. It requires installed providers and modules. Run `terraform init -backend=false` first when validating without backend access.
 
 **Common flags:**
 ```bash
@@ -165,7 +165,7 @@ Error: Reference to undeclared input variable
 **Output shows:**
 - Terraform version
 - Provider versions
-- Terraform required version (if specified)
+- The operating system and architecture
 
 **Example:**
 ```bash
@@ -225,9 +225,11 @@ ami-default
 terraform graph                    # Output dependency graph
 terraform graph > graph.dot        # Save to file
 terraform graph -type=plan         # Plan-time graph
-terraform graph -type=apply        # Apply-time graph (default)
-terraform graph -type=destroy      # Destroy-time graph
+terraform graph -type=plan-destroy # Destroy-plan graph
+terraform graph -plan=tfplan       # Apply graph for an existing saved plan
 ```
+
+Without `-type` or `-plan`, Terraform 1.12 emits a simplified resource dependency graph. See the [graph command reference](https://developer.hashicorp.com/terraform/cli/commands/graph).
 
 **Visualization:**
 ```bash
@@ -324,6 +326,8 @@ terraform state rm aws_instance.old
 
 **Warning:** Resource still exists in AWS. Terraform will no longer manage it.
 
+Also remove or refactor its resource block; leaving it configured causes the next plan to propose creating a replacement object.
+
 ---
 
 ### `terraform state pull`
@@ -378,7 +382,7 @@ terraform workspace delete dev   # Delete workspace (must be empty)
 
 **Use when:**
 - Lock stuck from crashed Terraform process
-- Another user's lock needs release
+- Your own stale lock remains after automatic unlocking failed
 - Manual intervention required
 
 **Example:**
@@ -394,7 +398,7 @@ terraform force-unlock <LOCK_ID>
 
 | Command | Purpose | Modifies State? | Modifies Infrastructure? |
 |---------|---------|----------------|------------------------|
-| `terraform init` | Initialize workspace | ❌ | ❌ |
+| `terraform init` | Initialize working directory | Backend migration can copy state | ❌ |
 | `terraform plan` | Preview changes | ❌ | ❌ |
 | `terraform apply` | Apply changes | ✅ | ✅ |
 | `terraform destroy` | Destroy resources | ✅ | ✅ |
@@ -402,7 +406,8 @@ terraform force-unlock <LOCK_ID>
 | `terraform validate` | Check syntax | ❌ | ❌ |
 | `terraform state mv` | Move in state | ✅ | ❌ |
 | `terraform state rm` | Remove from state | ✅ | ❌ |
-| `terraform refresh` | Sync state | ✅ | ❌ |
+| `terraform plan -refresh-only` | Preview state/output updates | ❌ | ❌ |
+| `terraform apply -refresh-only` | Record state/output updates | ✅ | ❌ |
 
 ---
 
@@ -417,7 +422,7 @@ D) `terraform init`
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - `terraform validate` checks syntax and configuration errors without connecting to providers.
+Answer: **B** - `terraform validate` checks syntax and internal consistency using installed provider schemas, without accessing remote APIs or validating credentials.
 </details>
 
 ---
@@ -425,13 +430,13 @@ Answer: **B** - `terraform validate` checks syntax and configuration errors with
 ### Question 2
 What is the difference between `terraform plan -refresh=false` and `terraform plan -refresh-only`?
 A) Both skip refreshing state
-B) `-refresh=false` skips refresh; `-refresh-only` only refreshes state
+B) `-refresh=false` skips refresh; `-refresh-only` plans only state/output updates
 C) Both only refresh state
 D) No difference
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - `-refresh=false` uses cached state for faster plans. `-refresh-only` updates state from real infrastructure but doesn't plan changes.
+Answer: **B** - `-refresh=false` skips reading remote objects to refresh them before planning. `plan -refresh-only` proposes state/output updates without infrastructure changes; an apply is needed to persist those updates.
 </details>
 
 ---
@@ -481,9 +486,9 @@ Answer: **A** - Saves execution plan to a file. Use `terraform apply tfplan` to 
 ## 9. Key Takeaways
 
 - **`terraform init`**: Must run before plan/apply. Downloads providers and initializes backend.
-- **`terraform validate`**: Fast syntax/config check. Doesn't require providers.
+- **`terraform validate`**: Checks syntax/configuration using installed providers and modules; does not check remote services.
 - **`terraform fmt`**: Formats code. Idempotent and safe to run multiple times.
-- **`terraform plan -refresh-only`**: Updates state from real infrastructure without planning changes.
+- **`terraform plan -refresh-only`**: Previews state/output updates; `apply -refresh-only` records them without changing infrastructure.
 - **`terraform state mv`**: Renames resources in state without recreating them.
 - **`terraform state rm`**: Removes resource from state but keeps it in the cloud.
 - Always use `terraform plan` before `apply` in production.
@@ -500,10 +505,10 @@ Answer: **A** - Saves execution plan to a file. Use `terraform apply tfplan` to 
 → Always `terraform fmt`
 
 **Pattern 3: Moving/renaming resources**
-→ Always `terraform state mv`
+→ `terraform state mv`, or a declarative `moved` block for a reviewable refactor
 
-**Pattern 4: Fast state refresh without planning**
-→ `terraform plan -refresh-only` or `terraform refresh`
+**Pattern 4: Record drift without changing infrastructure**
+→ Review `terraform plan -refresh-only`, then `terraform apply -refresh-only`. The older `terraform refresh` command is deprecated and applies state changes without a review prompt.
 
 **Pattern 5: Applying saved plan**
 → `terraform apply <plan-file>`
@@ -515,4 +520,6 @@ Answer: **A** - Saves execution plan to a file. Use `terraform apply tfplan` to 
 - [Terraform CLI Commands](https://developer.hashicorp.com/terraform/cli/commands)
 - [Terraform State Commands](https://developer.hashicorp.com/terraform/cli/commands/state)
 - [Terraform Plan Options](https://developer.hashicorp.com/terraform/cli/commands/plan)
+- [Validation Requirements](https://developer.hashicorp.com/terraform/cli/commands/validate)
+- [Refresh Command Deprecation](https://developer.hashicorp.com/terraform/cli/commands/refresh)
 
