@@ -9,7 +9,7 @@
 ## Topics
 - [State Management](01-state-management.md)
 - [Advanced Terraform Features](02-advanced-terraform-features.md)
-- [Interview Questions](03-interview-questions)
+- [Interview Questions](03-interview-questions.md)
 
 ## Cheat sheet
 - Inspect state: `terraform state list`
@@ -27,7 +27,8 @@ Set up a local backend with workspaces:
 ```hcl
 terraform {
   backend "local" {
-    path = "./terraform.tfstate.d"
+    path          = "./terraform.tfstate"
+    workspace_dir = "./terraform.tfstate.d"
   }
 }
 ```
@@ -37,6 +38,7 @@ terraform init
 terraform workspace new prod
 terraform state list
 ```
+`path` is the default workspace's state **file**; `workspace_dir` holds named workspaces. `workspace new prod` also selects `prod`. This empty example has no managed resources until you add and apply a configuration. See the [local backend reference](https://developer.hashicorp.com/terraform/language/backend/local).
 ---
 
 <img width="6044" height="5376" alt="image" src="https://github.com/user-attachments/assets/54475168-d27e-4603-a2dc-8a1776e6b1e5" />

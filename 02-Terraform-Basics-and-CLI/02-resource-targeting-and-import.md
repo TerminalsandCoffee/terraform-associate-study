@@ -12,7 +12,7 @@
 
 ### What is Resource Targeting?
 
-Resource targeting allows you to apply Terraform operations to **specific resources** instead of all resources in your configuration.
+Resource targeting focuses a plan on selected resource instances **and their dependencies**. Use it only for exceptional recovery or troubleshooting; routine plans should cover the full configuration.
 
 **Syntax:**
 ```bash
@@ -52,70 +52,67 @@ terraform apply -target=module.vpc.aws_vpc.main
 **Target resources with count/for_each:**
 ```bash
 # Count
-terraform apply -target=aws_instance.web[0]
+terraform apply -target='aws_instance.web[0]'
 
 # For_each
-terraform apply -target=aws_instance.web["web-1"]
+terraform apply -target='aws_instance.web["web-1"]'
 ```
 
 ### Use Cases for Targeting
 
-1. **Testing specific resources:**
+1. **Recovering a failed operation:**
    ```bash
    terraform apply -target=aws_instance.web
    ```
-   Apply only the web instance to test changes quickly.
+   Focus recovery on the web instance and its dependencies after diagnosing the failure.
 
-2. **Partial applies:**
+2. **Following a specific Terraform recovery diagnostic:**
    ```bash
    terraform apply -target=aws_vpc.main -target=aws_subnet.private
    ```
-   Create networking before compute resources.
+   Target the addresses identified by the diagnostic, then return to the full workflow.
 
-3. **Incremental updates:**
+3. **Investigating a blocked component:**
    ```bash
    terraform plan -target=aws_instance.app
    terraform apply -target=aws_instance.app
    ```
-   Update one component at a time.
+   Inspect the targeted plan before deciding whether a recovery apply is appropriate.
 
 4. **Emergency fixes:**
    ```bash
    terraform apply -target=aws_security_group.critical
    ```
-   Quickly fix a critical security group without touching other resources.
+   Review the focused plan, which may include dependency changes as well as the security group.
 
 ### Important Limitations
 
-⚠️ **Targeting doesn't resolve dependencies automatically:**
-- If resource B depends on resource A, targeting B will fail unless A exists
-- Terraform may create dependencies if it can determine them statically
-- Some dependencies require manual targeting
+⚠️ **Targeting includes dependencies but can leave an incomplete result:**
+- Targeting B includes A when B references A or declares `depends_on = [A]`.
+- Resources that depend on B are not automatically included just because B is targeted.
+- Terraform cannot infer a relationship expressed only as unrelated literal IDs; model dependencies correctly in configuration.
 
 **Example:**
 ```bash
-# This might fail if VPC doesn't exist
+# Includes dependencies described by web's configuration
 terraform apply -target=aws_instance.web
 
-# You need to target both
-terraform apply \
-  -target=aws_vpc.main \
-  -target=aws_instance.web
+# Always check the whole configuration afterward
+terraform plan
 ```
 
 ### Targeting Best Practices
 
 ✅ **Do:**
-- Use for testing specific resources during development
-- Use for incremental rollouts
-- Use for fixing individual components
-- Always verify dependencies
+- Reserve targeting for exceptional recovery or troubleshooting
+- Review every resource included in the targeted plan
+- Run a full `terraform plan` after each targeted apply
 
 ❌ **Don't:**
 - Don't rely on targeting as a permanent workflow
 - Don't skip dependency resources
 - Don't use targeting to avoid fixing dependency issues
-- Don't forget to run full `terraform plan` periodically
+- Don't use it for routine staged deployments; separate configurations when independent lifecycles are needed
 
 ---
 
@@ -156,8 +153,9 @@ resource "aws_instance" "web" {
 }
 ```
 
-**Step 2: Run import command**
+**Step 2: Initialize, then run the import command**
 ```bash
+terraform init
 terraform import aws_instance.web i-1234567890abcdef0
 ```
 
@@ -175,11 +173,28 @@ Terraform will show any differences between config and actual resource.
 **Step 5: Update configuration to match reality**
 Update your `.tf` file to match the imported resource's actual attributes.
 
-**Step 6: Apply to sync**
+**Step 6: Apply only intended changes**
 ```bash
 terraform apply
 ```
-This should show no changes if config matches reality.
+The CLI import already wrote the object to state. If the full plan shows no changes, no additional apply is needed. Review any proposed updates or replacements before applying.
+
+### Configuration-Driven Import (Terraform 1.5+)
+
+An `import` block makes the import reviewable in the normal plan/apply workflow:
+
+```hcl
+import {
+  to = aws_s3_bucket.data
+  id = "my-existing-bucket"
+}
+
+resource "aws_s3_bucket" "data" {
+  bucket = "my-existing-bucket"
+}
+```
+
+Run `terraform plan`, review the import and any resource changes, then `terraform apply`. If you omit the destination resource block, `terraform plan -generate-config-out=generated.tf` can generate a starting configuration for supported imports. Review and edit it before applying. See [configuration-driven import](https://developer.hashicorp.com/terraform/language/import).
 
 ### Common Import Examples
 
@@ -207,7 +222,7 @@ resource "aws_instance" "web" {
 ```
 
 ```bash
-terraform import aws_instance.web i-0abcd1234efgh5678
+terraform import aws_instance.web i-0123456789abcdef0
 ```
 
 **Note:** Import only the instance. Additional resources (security groups, key pairs, etc.) may need separate imports.
@@ -221,21 +236,22 @@ resource "aws_vpc" "main" {
 ```
 
 ```bash
-terraform import aws_vpc.main vpc-0abcd1234efgh5678
+terraform import aws_vpc.main vpc-0123456789abcdef0
 ```
 
 #### Importing Resources with Count
 
 ```hcl
 resource "aws_instance" "web" {
-  count = 2
-  ami   = "ami-0123456789abcdef0"  # Example AMI ID
+  count         = 2
+  ami           = "ami-0123456789abcdef0"  # Replace with the existing instances' AMI
+  instance_type = "t2.micro"
 }
 ```
 
 ```bash
-terraform import aws_instance.web[0] i-11111111111111111
-terraform import aws_instance.web[1] i-22222222222222222
+terraform import 'aws_instance.web[0]' i-11111111111111111
+terraform import 'aws_instance.web[1]' i-22222222222222222
 ```
 
 #### Importing Resources with for_each
@@ -261,7 +277,7 @@ module "vpc" {
 ```
 
 ```bash
-terraform import module.vpc.aws_vpc.main vpc-0abcd1234efgh5678
+terraform import module.vpc.aws_vpc.main vpc-0123456789abcdef0
 ```
 
 ### Finding Resource IDs
@@ -290,75 +306,59 @@ aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,CidrBlock]' --output table
 After import, `terraform plan` shows many changes because your configuration doesn't match reality.
 
 **Solution:**
-1. Run `terraform show aws_instance.web` to see actual attributes
+1. Run `terraform state show aws_instance.web` to see recorded attributes
 2. Update your configuration to match
 3. Run `terraform plan` again to verify
 
 #### Challenge 2: Missing Dependencies
 
-Resource exists but depends on other resources not in Terraform.
+An imported instance may reference security groups or a VPC that Terraform does not manage. Those objects do not have to be imported first just to import the instance.
 
-**Example:**
+**Options:**
 ```bash
+# Import the instance alone when its configuration uses existing IDs or data sources
 terraform import aws_instance.web i-1234567890abcdef0
-# Error: Security group sg-12345 doesn't exist in state
 ```
 
 **Solution:**
-1. Import dependencies first:
-   ```bash
-   terraform import aws_security_group.web sg-12345
-   terraform import aws_instance.web i-1234567890abcdef0
-   ```
+1. Use data sources or input variables for objects managed elsewhere.
+2. If this configuration should manage those objects too, add their resource blocks and import each object to a unique address.
+3. Ensure configuration references resolve and review a full plan before applying.
 
 #### Challenge 3: Complex Resources
 
 Some resources have many attributes that must match exactly.
 
 **Solution:**
-- Use `terraform show` to get all attributes
-- Copy attributes into configuration
-- Or use tools like `terraformer` for bulk imports
+- Inspect `terraform state show` to understand the object
+- Set only configurable arguments; do not copy computed-only attributes such as IDs into the resource block
+- Use configuration-driven import and `-generate-config-out` for an editable starting point
 
 ### Import vs Manual State Manipulation
 
-**Import (recommended):**
-- ✅ Safe and verified
-- ✅ Creates proper resource in state
-- ✅ Validates resource exists
+**Import:**
+- Binds an existing remote object to a Terraform resource address
+- Does not create the object or make configuration automatically match it
+- Requires reviewing the next plan for unintended changes
 
-**Manual state add (advanced, risky):**
-```bash
-# NOT recommended - use import instead
-terraform state rm aws_instance.web
-terraform import aws_instance.web i-1234567890abcdef0
-```
+There is no `terraform state add` command. Use import to adopt an unmanaged object, `terraform state mv` or a `moved` block to rename an already tracked object, and `terraform state rm` only when intentionally giving up management. Bind each remote object to exactly one address.
 
 ### Bulk Import Strategies
 
-**Option 1: Script multiple imports**
+**Option 1: Script explicit imports to distinct configured addresses (Bash)**
 ```bash
 #!/bin/bash
-terraform import aws_instance.web[0] i-11111111111111111
-terraform import aws_instance.web[1] i-22222222222222222
-terraform import aws_instance.app[0] i-33333333333333333
+terraform import 'aws_instance.web[0]' i-11111111111111111
+terraform import 'aws_instance.web[1]' i-22222222222222222
 ```
 
-**Option 2: Use terraformer (third-party tool)**
-```bash
-terraformer import aws --resources=vpc,subnet,sg
-```
+**Option 2: Use multiple `import` blocks**
 
-**Option 3: Generate import commands**
-```bash
-# List all resources, generate import commands
-aws ec2 describe-instances --query 'Reservations[*].Instances[*].InstanceId' | \
-  jq -r '.[] | .[] | "terraform import aws_instance.web \(.)"'
-```
+Declare a separate destination address for each existing object, then review all imports in one full plan. Terraform 1.7+ also supports `for_each` on `import` blocks for known collections. Do not generate many imports pointing to the same resource address.
 
 ---
 
-## 3. Combining Targeting and Import
+## 3. Verifying Imports
 
 ### Workflow: Import and Verify
 
@@ -366,16 +366,18 @@ aws ec2 describe-instances --query 'Reservations[*].Instances[*].InstanceId' | \
 # 1. Import the resource
 terraform import aws_instance.web i-1234567890abcdef0
 
-# 2. Plan with targeting to see differences
-terraform plan -target=aws_instance.web
+# 2. Plan the full configuration to see differences
+terraform plan
 
 # 3. Update configuration if needed
 
-# 4. Apply to sync
-terraform apply -target=aws_instance.web
+# 4. Apply only reviewed, intended changes (if any)
+terraform apply
 ```
 
-### Workflow: Import Dependencies First
+### Workflow: Adopt Related Resources
+
+This order is a convenient way to organize the work, not a requirement that every dependency be in state before an instance can be imported.
 
 ```bash
 # 1. Import VPC
@@ -388,7 +390,7 @@ terraform import aws_security_group.web sg-1234567890abcdef0
 terraform import aws_instance.web i-1234567890abcdef0
 
 # 4. Plan all imported resources
-terraform plan -target=aws_vpc.main -target=aws_security_group.web -target=aws_instance.web
+terraform plan
 ```
 
 ---
@@ -396,7 +398,7 @@ terraform plan -target=aws_vpc.main -target=aws_security_group.web -target=aws_i
 ## 4. Practice Questions
 
 ### Question 1
-You want to apply changes to only one EC2 instance without affecting others. What command should you use?
+During exceptional recovery, which command targets an EC2 instance and its dependencies?
 A) `terraform apply -filter=aws_instance.web`
 B) `terraform apply -target=aws_instance.web`
 C) `terraform apply -resource=aws_instance.web`
@@ -404,7 +406,7 @@ D) `terraform apply aws_instance.web`
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Use `-target` flag to apply operations to specific resources. The syntax is `terraform apply -target=resource_address`.
+Answer: **B** - `-target` focuses on the selected instance and its dependencies. It does not guarantee only that instance changes; review the plan and run a full plan afterward.
 </details>
 
 ---
@@ -442,9 +444,9 @@ Answer: **C** - After import, you should review `terraform state show` to see ac
 - **Targeting**: Use `-target` to operate on specific resources. Syntax: `terraform plan -target=resource_address`.
 - **Import**: Brings existing infrastructure under Terraform management. Syntax: `terraform import resource_address infrastructure_id`.
 - **Import process**: Add resource block → import → verify state → update config → apply.
-- **Targeting limitations**: Doesn't automatically resolve all dependencies - may need to target dependencies manually.
+- **Targeting limitations**: Includes dependencies, can omit downstream changes, and is intended for exceptional situations.
 - **Configuration matching**: After import, update your `.tf` file to match actual resource attributes.
-- **Dependencies**: Import dependent resources (security groups, VPCs) before resources that depend on them.
+- **Dependencies**: Decide whether related objects should be imported or referenced through data sources/inputs; each managed object needs its own address.
 - **Verification**: Always run `terraform plan` after import to identify configuration mismatches.
 
 ---
@@ -453,5 +455,5 @@ Answer: **C** - After import, you should review `terraform state show` to see ac
 
 - [Terraform Resource Targeting](https://developer.hashicorp.com/terraform/cli/commands/plan#resource-targeting)
 - [Terraform Import](https://developer.hashicorp.com/terraform/cli/commands/import)
-- [Import Command](https://developer.hashicorp.com/terraform/cli/commands/import)
+- [Configuration-Driven Import](https://developer.hashicorp.com/terraform/language/import)
 

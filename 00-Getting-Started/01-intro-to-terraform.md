@@ -1,8 +1,8 @@
 # Introduction to Terraform
 
-Terraform is an open-source **Infrastructure as Code (IaC)** tool developed by **HashiCorp**. It lets you define, provision, and manage infrastructure using simple configuration files instead of clicking through cloud consoles.
+Terraform is an **Infrastructure as Code (IaC)** tool developed by **HashiCorp**. It lets you define, provision, and manage infrastructure using configuration files instead of clicking through cloud consoles. Current Terraform source is available under the Business Source License (BSL), rather than an OSI-approved open-source license; see [HashiCorp's licensing FAQ](https://www.hashicorp.com/en/license-faq).
 
-Terraform works across multiple cloud providers, but in this repository, the main focus is on **AWS**, since it’s the most widely used platform in real-world DevOps and Cloud Engineering projects.
+Terraform works across multiple cloud providers; this repository uses **AWS** for its examples.
 
 This document provides a practical introduction to Terraform — what it is, how it works, and why it’s essential for anyone building and managing modern cloud infrastructure.
 
@@ -16,7 +16,7 @@ This document provides a practical introduction to Terraform — what it is, how
 
 * **Automation:** Removes manual setup and configuration, reducing human error.
 * **Consistency:** Reproducible environments every time (“it works on my machine” no longer applies).
-* **Version Control:** Track and roll back infrastructure changes through Git just like source code.
+* **Version Control:** Track and review configuration changes through Git. Reverting code requires a new plan/apply and does not automatically recover deleted infrastructure or data.
 * **Cost and Time Savings:** Less time managing servers manually → more time building reliable systems.
 
 ---
@@ -53,7 +53,7 @@ This workflow makes Terraform a powerful tool for both production infrastructure
 
 ## Managing AWS Services with Terraform
 
-Terraform connects to AWS through the **AWS provider** — a plugin that exposes all AWS resources (EC2, S3, IAM, VPCs, etc.) to Terraform.
+Terraform connects to AWS through the **AWS provider** — a plugin that supports many AWS resources (EC2, S3, IAM, VPCs, etc.).
 
 Example provider setup:
 
@@ -72,7 +72,7 @@ resource "aws_instance" "example" {
 }
 ```
 
-This small configuration defines and deploys an EC2 instance automatically — no console clicks required.
+This snippet illustrates an EC2 resource. Before applying, supply a real AMI for the selected region, declare the AWS provider requirement, and configure credentials and suitable networking; the placeholder AMI cannot be deployed.
 
 ---
 

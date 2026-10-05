@@ -22,12 +22,12 @@
   }
   ```
 - Use multiple providers with aliases: `provider "aws" { alias = "use2" }`
-- Lock providers: `terraform providers lock -platform=linux_amd64`
+- Commit the `.terraform.lock.hcl` produced by `terraform init`. Add checksums for another platform with `terraform providers lock -platform=linux_amd64`.
 
 ## Official documentation
 - [Providers Overview](https://developer.hashicorp.com/terraform/language/providers)
 - [Terraform Registry](https://registry.terraform.io/)
-- [Provider Versioning](https://developer.hashicorp.com/terraform/language/providers/versions)
+- [Provider Version Constraints](https://developer.hashicorp.com/terraform/language/providers/requirements#version-constraints)
 
 ## Hands-on task
 Log the providers required by a configuration:

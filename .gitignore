@@ -1,0 +1,27 @@
+# Terraform working directories, state, saved plans, and crash logs
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfout
+tfplan
+crash.log
+crash.*.log
+terraform.log
+
+# Local inputs may contain credentials. Keep example files explicit.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+.terraformrc
+terraform.rc
+.env
+.env.*
+!.env.example
+
+# Python check caches
+__pycache__/
+*.pyc
+
+# Keep .terraform.lock.hcl tracked for reproducible provider selection.

@@ -1,94 +1,100 @@
 <#
 .SYNOPSIS
-  Safe-night Git: never commit to main, auto-branch from latest remote, push, open PR.
+  Commit on a feature branch, push it, and open a GitHub compare page.
 
 .USAGE
-  pwsh ./scripts/git-night.ps1 -Message "What you changed" [-Force] [-NoVerify]
+  pwsh ./Scripts/git-night.ps1 -Message "What you changed" [-Force] [-NoVerify]
 
 .NOTES
-  - Stashes nothing → zero data loss.
-  - Always bases new branch on remote/$MainBranch.
-  - Auto-detects GitHub user/repo from remote URL.
-  - Skips commit hooks by default (late-night mercy).
+  - Stages all changes. Never stashes or force-pushes. Stops on Git errors.
+  - Refuses to leave unpublished commits behind on a protected branch.
+  - Commit hooks run unless -NoVerify is supplied.
+  - -Force checks a clean working tree; it does not create an empty commit.
 #>
 param(
-  [Parameter(Mandatory)][string]$Message,
+  [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Message,
   [switch]$Force,
-  [switch]$NoVerify = $true   # change to $false if you want hooks
+  [switch]$NoVerify
 )
 
-# ───── CONFIG ─────
+$ErrorActionPreference = 'Stop'
+# Git exit codes are checked explicitly; diff --quiet uses 1 for changes.
+$PSNativeCommandUseErrorActionPreference = $false
 $Protected = @("main","master","develop")
 $Remote    = "origin"
-$FG = "DarkCyan"; $ERR = "Red"; $OK = "Green"; $WARN = "Yellow"
-function Write-Status([string]$m, [string]$c=$FG) { Write-Host $m -ForegroundColor $c }
 
-# ───── 0. AUTO-DETECT REPO INFO ─────
-$remoteUrl = git remote get-url $Remote
-if ($remoteUrl -match 'github\.com[/:](?<user>[^/]+)/(?<repo>[^.]+)') {
-    $GitHubUser = $matches.user
-    $Repo       = $matches.repo
-} else {
-    Write-Status "Could not parse GitHub remote – falling back to config." $WARN
-    $GitHubUser = "TerminalsandCoffee"
-    $Repo       = (git rev-parse --show-toplevel | Split-Path -Leaf)
+function Invoke-Git {
+  & git @args
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($args -join ' ') failed (exit $LASTEXITCODE). No further steps were run."
+  }
 }
-$MainBranch = $Protected | Where-Object { git show-ref --verify --quiet refs/heads/$_ } | Select-Object -First 1
-if (-not $MainBranch) { $MainBranch = "main" }
 
-# ───── 1. CURRENT STATE ─────
-$curBranch = (git rev-parse --abbrev-ref HEAD).Trim()
-$dirty     = git status --porcelain
-
-if (-not $dirty -and -not $Force) {
-    Write-Status "Nothing to commit – exiting." $WARN
+try {
+  Invoke-Git rev-parse --show-toplevel | Out-Null
+  $curBranch = (Invoke-Git symbolic-ref --quiet --short HEAD).Trim()
+  $dirty = Invoke-Git status --porcelain
+  if (-not $dirty -and -not $Force) {
+    Write-Host 'Nothing to commit.'
     exit 0
-}
+  }
 
-# ───── 2. ENSURE FEATURE BRANCH FROM LATEST REMOTE ─────
-if ($Protected -contains $curBranch) {
-    Write-Status "`nOn protected '$curBranch' – creating feature branch from latest remote..." $WARN
+  # Read the configured URL, before any local insteadOf rewrite.
+  $remoteUrl = (Invoke-Git config --get "remote.$Remote.url").Trim()
+  if ($remoteUrl -notmatch '^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)(?<owner>[^/]+)/(?<repo>[^/]+?)(?:\.git)?/?$') {
+    throw 'origin must be a GitHub HTTPS or SSH remote; refusing to guess a repository.'
+  }
+  $GitHubOwner = $Matches.owner
+  $Repo = $Matches.repo
 
-    # Always fetch latest
-    git fetch $Remote $curBranch
+  Invoke-Git remote set-head $Remote --auto | Out-Null
+  $defaultRef = (Invoke-Git symbolic-ref --short "refs/remotes/$Remote/HEAD").Trim()
+  $MainBranch = $defaultRef.Substring($Remote.Length + 1)
 
-    # Build timestamped name
-    $ts        = Get-Date -Format "yyyyMMdd-HHmm"
-    $sanitized = $Message -replace '[^\w-]+','-' -replace '-+$',''
-    $newBranch = "feat/$ts-$($sanitized.ToLower())"
-
-    # Create branch directly from remote (carries over working tree)
-    git checkout -b $newBranch "$Remote/$curBranch"
-    Write-Status "Switched to $newBranch (based on $Remote/$curBranch)" $OK
-}
-else {
+  if ($Protected -contains $curBranch -or $curBranch -eq $MainBranch) {
+    Invoke-Git fetch $Remote "refs/heads/${curBranch}:refs/remotes/$Remote/$curBranch" | Out-Host
+    $ahead = [int](Invoke-Git rev-list --count "$Remote/$curBranch..HEAD")
+    if ($ahead -gt 0) {
+      throw "'$curBranch' has $ahead unpublished commit(s). Create a feature branch from HEAD to preserve them, then rerun."
+    }
+    $slug = ($Message -replace '[^a-zA-Z0-9-]+', '-').Trim('-').ToLowerInvariant()
+    if (-not $slug) { $slug = 'changes' }
+    if ($slug.Length -gt 60) { $slug = $slug.Substring(0, 60).TrimEnd('-') }
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 6)
+    $newBranch = "feat/$stamp-$slug-$suffix"
+    Invoke-Git checkout -b $newBranch "$Remote/$curBranch" | Out-Host
+  } else {
     $newBranch = $curBranch
-    Write-Status "Already on feature branch '$newBranch' – proceeding." $FG
-}
+  }
 
-# ───── 3. STAGE & COMMIT ─────
-git add -A
-if (git diff --cached --quiet) {
-    Write-Status "No staged changes after add – aborting." $WARN
+  # A failed branch switch must never fall through to staging or committing.
+  $activeBranch = (Invoke-Git symbolic-ref --quiet --short HEAD).Trim()
+  if ($Protected -contains $activeBranch -or $activeBranch -eq $MainBranch) {
+    throw "Refusing to commit on protected branch '$activeBranch'."
+  }
+  Invoke-Git add -A | Out-Host
+  & git diff --cached --quiet
+  $diffExit = $LASTEXITCODE
+  if ($diffExit -eq 0) {
+    Write-Host 'No staged changes.'
     exit 0
+  }
+  if ($diffExit -ne 1) { throw "Unable to inspect staged changes (exit $diffExit)." }
+
+  $commitArgs = @('commit', '-m', $Message)
+  if ($NoVerify) { $commitArgs += '--no-verify' }
+  Invoke-Git @commitArgs | Out-Host
+  Invoke-Git push -u $Remote $newBranch | Out-Host
+
+  $baseName = [Uri]::EscapeDataString($MainBranch)
+  $headName = [Uri]::EscapeDataString($newBranch)
+  $prUrl = "https://github.com/$GitHubOwner/$Repo/compare/${baseName}...${headName}?expand=1"
+  Write-Host "Pushed branch: $newBranch"
+  Write-Host "Open a pull request: $prUrl"
+  Start-Process -FilePath $prUrl
+  exit 0
+} catch {
+  Write-Error $_ -ErrorAction Continue
+  exit 1
 }
-
-$commitArgs = @("-m", $Message)
-if ($NoVerify) { $commitArgs += "--no-verify" }
-git commit @commitArgs
-if (-not $?) {
-    Write-Status "Commit failed (hook?). Fix and retry." $ERR
-    exit 1
-}
-
-# ───── 4. PUSH & SET UPSTREAM ─────
-git push -u $Remote $newBranch
-
-# ───── 5. OPEN PR COMPARE VIEW ─────
-$prUrl = "https://github.com/$GitHubUser/$Repo/compare/$MainBranch...$newBranch?expand=1"
-Start-Process $prUrl
-
-# ───── DONE ─────
-Write-Status "`nBranch : $newBranch" $OK
-Write-Status "PR     : $prUrl`n" $OK
-Write-Status "Night-mode engaged – your changes are safe. ☾" "DarkGray"

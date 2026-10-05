@@ -1,4 +1,6 @@
-# 14 - Custom Validation Rules
+# Custom Validation Rules
+
+Examples are independent illustrative fragments. AWS examples require provider configuration and any omitted resources/variables. Variable-only blocks can be tested in a separate directory without a cloud provider.
 
 ## Learning Objectives
 - Understand how to validate variable inputs using `validation` blocks.
@@ -14,7 +16,8 @@ Terraform provides several mechanisms to validate configurations and catch error
 
 1. **Variable Validation** - Validate input variables before they're used
 2. **Preconditions** - Validate assumptions before resource creation/modification
-3. **Postconditions** - Validate resource outputs after creation
+3. **Postconditions** - Check resource/data source results after the operation
+4. **Check blocks** - Report failed assertions as warnings without blocking operations
 
 These validation mechanisms help catch configuration errors early and provide clear error messages.
 
@@ -24,7 +27,7 @@ These validation mechanisms help catch configuration errors early and provide cl
 
 ### Purpose
 
-Variable validation allows you to enforce rules on variable values before Terraform uses them in your configuration. This catches errors during `terraform plan` or `terraform apply`.
+Variable validation enforces input rules as soon as the required values are known. Usually that is during planning; conditions depending on unknown values can be deferred until apply. Terraform 1.12 supports cross-object references in validation conditions (introduced in 1.9), provided they do not create dependency cycles.
 
 ### Basic Syntax
 
@@ -34,7 +37,7 @@ variable "instance_type" {
   type        = string
   
   validation {
-    condition     = can(regex("^t[2-3]\\.[a-z]+$", var.instance_type))
+    condition     = can(regex("^t[23]\\.[a-z0-9]+$", var.instance_type))
     error_message = "Instance type must be a t2 or t3 instance (e.g., t2.micro, t3.small)."
   }
 }
@@ -48,6 +51,8 @@ variable "instance_type" {
 ### Common Validation Patterns
 
 #### Pattern 1: String Format Validation
+
+This is a deliberately restricted naming policy, not a complete implementation of all S3 bucket naming rules. AWS also enforces reserved names and global uniqueness.
 
 ```hcl
 variable "bucket_name" {
@@ -69,8 +74,8 @@ variable "instance_count" {
   type        = number
   
   validation {
-    condition     = var.instance_count > 0 && var.instance_count <= 10
-    error_message = "Instance count must be between 1 and 10."
+    condition     = var.instance_count >= 1 && var.instance_count <= 10 && floor(var.instance_count) == var.instance_count
+    error_message = "Instance count must be an integer between 1 and 10."
   }
 }
 ```
@@ -97,7 +102,7 @@ variable "vpc_cidr" {
   type        = string
   
   validation {
-    condition     = can(cidrhost(var.vpc_cidr, 0))
+    condition     = can(cidrnetmask(var.vpc_cidr))
     error_message = "VPC CIDR must be a valid IPv4 CIDR block (e.g., 10.0.0.0/16)."
   }
 }
@@ -153,7 +158,7 @@ variable "tags" {
 
 ### Purpose
 
-Preconditions validate assumptions about resources or data sources **before** Terraform creates or modifies resources. They're placed in `lifecycle` blocks.
+Resource/data source preconditions are placed in `lifecycle` blocks and check assumptions before the operation. They cannot reference the containing object or use `self`. Output blocks can also contain a `precondition` directly, without `lifecycle`. Module call blocks do not support lifecycle conditions.
 
 ### Basic Syntax
 
@@ -175,6 +180,8 @@ resource "aws_instance" "web" {
 
 #### Use Case 1: Validate Data Source Results
 
+Use a **postcondition** to inspect the result after the provider reads it. A precondition can instead check inputs to that lookup.
+
 ```hcl
 data "aws_ami" "latest" {
   most_recent = true
@@ -185,9 +192,9 @@ data "aws_ami" "latest" {
   }
   
   lifecycle {
-    precondition {
-      condition     = data.aws_ami.latest.id != null
-      error_message = "No suitable AMI found. Check AMI filters."
+    postcondition {
+      condition     = self.architecture == "x86_64"
+      error_message = "The selected AMI must use the x86_64 architecture."
     }
   }
 }
@@ -200,23 +207,29 @@ resource "aws_instance" "web" {
 
 #### Use Case 2: Validate Module Inputs
 
+Place the validation in the child module's input variable, not in a `lifecycle` block on the module call:
+
 ```hcl
-module "vpc" {
-  source = "./modules/vpc"
-  
-  cidr_block = var.vpc_cidr
-  
-  lifecycle {
-    precondition {
-      condition     = can(cidrhost(var.vpc_cidr, 0))
-      error_message = "VPC CIDR block must be a valid IPv4 CIDR."
-    }
-    
-    precondition {
-      condition     = tonumber(split("/", var.vpc_cidr)[1]) <= 24
-      error_message = "VPC CIDR block must be /24 or larger (e.g., /16, /20)."
-    }
+# modules/vpc/variables.tf
+variable "cidr_block" {
+  type = string
+
+  validation {
+    condition = can(cidrnetmask(var.cidr_block)) && try(
+      tonumber(split("/", var.cidr_block)[1]) >= 16 &&
+      tonumber(split("/", var.cidr_block)[1]) <= 24,
+      false
+    )
+    error_message = "Use a valid IPv4 CIDR with a prefix between /16 and /24."
   }
+}
+```
+
+```hcl
+# Root module fragment
+module "vpc" {
+  source     = "./modules/vpc"
+  cidr_block = var.vpc_cidr
 }
 ```
 
@@ -237,7 +250,7 @@ resource "aws_security_group" "web" {
   lifecycle {
     precondition {
       condition     = var.allowed_cidr != "0.0.0.0/0" || var.environment == "dev"
-      error_message = "Cannot allow 0.0.0.0/0 in production environment."
+      error_message = "Cannot allow 0.0.0.0/0 outside the dev environment."
     }
   }
 }
@@ -249,7 +262,7 @@ resource "aws_security_group" "web" {
 
 ### Purpose
 
-Postconditions validate resource outputs **after** Terraform creates or modifies resources. They're placed in `lifecycle` blocks and can reference the resource's own attributes.
+Postconditions check results after reading or changing an object and use `self` to reference that object. Terraform evaluates conditions during planning when possible and defers unknown results until apply. Failure blocks downstream operations but does not roll back changes already made.
 
 ### Basic Syntax
 
@@ -260,7 +273,7 @@ resource "aws_instance" "web" {
   
   lifecycle {
     postcondition {
-      condition     = self.public_ip != null || var.private_only
+      condition     = try(length(self.public_ip) > 0, false) || var.private_only
       error_message = "Instance must have a public IP unless private_only is true."
     }
   }
@@ -310,7 +323,7 @@ resource "aws_instance" "web" {
   
   lifecycle {
     postcondition {
-      condition     = length(self.security_groups) > 0
+      condition     = length(self.vpc_security_group_ids) > 0
       error_message = "Instance must have at least one security group attached."
     }
     
@@ -342,7 +355,7 @@ resource "aws_instance" "web" {
     
     # Validate after creation
     postcondition {
-      condition     = self.public_ip != null
+      condition     = try(length(self.public_ip) > 0, false)
       error_message = "Instance must have a public IP address."
     }
   }
@@ -371,17 +384,17 @@ variable "web_config" {
   }
   
   validation {
-    condition     = var.web_config.instance_count > 0 && var.web_config.instance_count <= 10
-    error_message = "Instance count must be between 1 and 10."
+    condition     = var.web_config.instance_count >= 1 && var.web_config.instance_count <= 10 && floor(var.web_config.instance_count) == var.web_config.instance_count
+    error_message = "Instance count must be an integer between 1 and 10."
   }
   
   validation {
-    condition     = can(regex("^t[2-3]\\.[a-z]+$", var.web_config.instance_type))
+    condition     = can(regex("^t[23]\\.[a-z0-9]+$", var.web_config.instance_type))
     error_message = "Instance type must be t2 or t3 family."
   }
   
   validation {
-    condition     = can(cidrhost(var.web_config.allowed_cidr, 0))
+    condition     = can(cidrnetmask(var.web_config.allowed_cidr))
     error_message = "Allowed CIDR must be a valid IPv4 CIDR block."
   }
 }
@@ -402,19 +415,16 @@ resource "aws_instance" "web" {
 
 ### Example 2: Data Source Validation
 
+Use a postcondition to examine a data source result. An unsuccessful lookup is already a provider error; a self-referencing precondition cannot intercept it.
+
 ```hcl
-data "aws_vpc" "selected" {
-  id = var.vpc_id
-  
+data "aws_subnet" "selected" {
+  id = var.subnet_id
+
   lifecycle {
-    precondition {
-      condition     = data.aws_vpc.selected.id != null
-      error_message = "VPC with ID ${var.vpc_id} not found."
-    }
-    
-    precondition {
-      condition     = data.aws_vpc.selected.enable_dns_hostnames
-      error_message = "VPC must have DNS hostnames enabled."
+    postcondition {
+      condition     = self.vpc_id == var.vpc_id
+      error_message = "The subnet must belong to the expected VPC."
     }
   }
 }
@@ -422,44 +432,38 @@ data "aws_vpc" "selected" {
 resource "aws_instance" "web" {
   ami           = var.ami_id
   instance_type = var.instance_type
-  subnet_id     = data.aws_vpc.selected.default_network_acl_id
-  
-  lifecycle {
-    postcondition {
-      condition     = self.private_ip != null
-      error_message = "Instance must have a private IP address."
-    }
-  }
+  subnet_id     = data.aws_subnet.selected.id
 }
 ```
 
 ### Example 3: Module Output Validation
 
+Inside the child module, an output can declare a precondition directly:
+
+```hcl
+# modules/network/outputs.tf
+output "public_subnet_id" {
+  value = aws_subnet.public.id
+
+  precondition {
+    condition     = aws_subnet.public.map_public_ip_on_launch
+    error_message = "This module requires public IP assignment on its public subnet."
+  }
+}
+```
+
+The caller accesses the validated output normally:
+
 ```hcl
 module "network" {
-  source = "./modules/network"
-  
+  source     = "./modules/network"
   cidr_block = "10.0.0.0/16"
-  
-  lifecycle {
-    precondition {
-      condition     = can(cidrhost("10.0.0.0/16", 0))
-      error_message = "Invalid CIDR block provided to network module."
-    }
-  }
 }
 
 resource "aws_instance" "web" {
   ami           = var.ami_id
   instance_type = var.instance_type
   subnet_id     = module.network.public_subnet_id
-  
-  lifecycle {
-    precondition {
-      condition     = module.network.public_subnet_id != null
-      error_message = "Network module must provide a public subnet ID."
-    }
-  }
 }
 ```
 
@@ -474,8 +478,8 @@ resource "aws_instance" "web" {
    variable "port" {
      type = number
      validation {
-       condition     = var.port > 0 && var.port <= 65535
-       error_message = "Port must be between 1 and 65535."
+       condition     = var.port >= 1 && var.port <= 65535 && floor(var.port) == var.port
+       error_message = "Port must be an integer between 1 and 65535."
      }
    }
    ```
@@ -492,9 +496,9 @@ resource "aws_instance" "web" {
    ```hcl
    data "aws_ami" "latest" {
      lifecycle {
-       precondition {
-         condition     = data.aws_ami.latest.id != null
-         error_message = "No AMI found matching the specified criteria."
+       postcondition {
+         condition     = self.architecture == "x86_64"
+         error_message = "The selected AMI must use x86_64."
        }
      }
    }
@@ -524,19 +528,15 @@ resource "aws_instance" "web" {
    
    # ✅ GOOD - Reasonable constraint
    validation {
-     condition     = can(regex("^t[2-3]\\.[a-z]+$", var.instance_type))
+     condition     = can(regex("^t[23]\\.[a-z0-9]+$", var.instance_type))
      error_message = "Instance type must be t2 or t3 family."
    }
    ```
 
-2. **Don't use validation for business logic:**
-   ```hcl
-   # ❌ BAD - Business logic, not validation
-   validation {
-     condition     = var.cost < 100
-     error_message = "Cost too high."
-   }
-   ```
+2. **Do not treat sample format checks as service guarantees:**
+   - The instance type regex permits a t2/t3-shaped string, including numeric sizes such as `t3.2xlarge`; it does not prove the type exists or is available in your region.
+   - `cidrhost` accepts both IPv4 and IPv6. Use `can(cidrnetmask(...))` when the rule specifically requires IPv4.
+   - A declared cost limit can be a valid policy, but an input number is not a measured cloud bill.
 
 3. **Don't ignore validation errors:**
    - Always fix validation errors rather than working around them
@@ -561,7 +561,7 @@ Answer: **B** - Variable validation blocks validate input values before Terrafor
 ---
 
 ### Question 2
-Where do you place `precondition` and `postcondition` blocks?
+Where do you place `precondition` and `postcondition` blocks for a managed resource?
 A) In the variable block
 B) In the resource lifecycle block
 C) In the provider block
@@ -569,7 +569,7 @@ D) In the terraform block
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Preconditions and postconditions are placed in the `lifecycle` block of a resource or data source.
+Answer: **B** - Resource/data source conditions go inside `lifecycle`. Output preconditions go directly in an output block. Module calls do not accept `lifecycle`.
 </details>
 
 ---
@@ -589,15 +589,15 @@ Answer: **B** - Preconditions validate assumptions before Terraform creates or m
 ---
 
 ### Question 4
-You want to ensure an instance type variable only accepts t2 or t3 instance types. Which validation should you use?
+Which check accepts t2/t3-shaped instance type names, including `t3.2xlarge`, without claiming to verify actual AWS availability?
 A) `condition = var.instance_type == "t2.micro" || var.instance_type == "t3.micro"`
-B) `condition = can(regex("^t[2-3]\\.[a-z]+$", var.instance_type))`
+B) `condition = can(regex("^t[23]\\.[a-z0-9]+$", var.instance_type))`
 C) `condition = var.instance_type != "t1.micro"`
 D) No validation needed
 
 <details>
 <summary>Show Answer</summary>
-Answer: **B** - Using a regex pattern with `can()` allows validation of any t2 or t3 instance type, not just specific ones. This is more flexible than listing individual types.
+Answer: **B** - The pattern checks a family prefix and an alphanumeric size suffix. It permits `2xlarge`, but also permits nonexistent sizes, so it is a format check rather than an AWS catalog lookup.
 </details>
 
 ---
@@ -606,12 +606,12 @@ Answer: **B** - Using a regex pattern with `can()` allows validation of any t2 o
 When does a variable validation block execute?
 A) Only during `terraform apply`
 B) Only during `terraform plan`
-C) During both `terraform plan` and `terraform apply`
+C) As soon as referenced values are known, usually at plan; unknown conditions can defer to apply
 D) Only when the variable is used in a resource
 
 <details>
 <summary>Show Answer</summary>
-Answer: **C** - Variable validation blocks execute during both `terraform plan` and `terraform apply`, catching errors early in the workflow.
+Answer: **C** - Terraform checks conditions as early as possible. A condition using a value unknown at plan time can be deferred until apply; do not assume every validation completes before infrastructure changes.
 </details>
 
 ---
@@ -622,7 +622,7 @@ Answer: **C** - Variable validation blocks execute during both `terraform plan` 
 - **Preconditions**: Validate assumptions before resource creation/modification using `lifecycle { precondition { ... } }`.
 - **Postconditions**: Validate resource outputs after creation/modification using `lifecycle { postcondition { ... } }`.
 - **Error messages**: Always provide clear, helpful error messages in validation blocks.
-- **Early detection**: Validation catches configuration errors during `terraform plan`, before any infrastructure changes.
+- **Timing**: Known conditions can fail during planning; unknown results can defer until apply. Postcondition failure does not roll back earlier changes.
 - **Multiple validations**: You can have multiple validation blocks in a single variable definition.
 - **Functions**: Use Terraform functions like `regex()`, `can()`, `contains()`, and `alltrue()` in validation conditions.
 
@@ -633,4 +633,5 @@ Answer: **C** - Variable validation blocks execute during both `terraform plan` 
 - [Terraform Variable Validation](https://developer.hashicorp.com/terraform/language/values/variables#custom-validation-rules)
 - [Terraform Preconditions and Postconditions](https://developer.hashicorp.com/terraform/language/expressions/custom-conditions)
 - [Terraform Functions](https://developer.hashicorp.com/terraform/language/functions)
-
+- [IPv4-only cidrnetmask function](https://developer.hashicorp.com/terraform/language/functions/cidrnetmask)
+- [Output preconditions](https://developer.hashicorp.com/terraform/language/values/outputs#custom-condition-checks)
