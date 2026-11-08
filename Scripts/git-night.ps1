@@ -6,9 +6,9 @@
   pwsh ./Scripts/git-night.ps1 -Message "What you changed" [-Force] [-NoVerify]
 
 .NOTES
-  - Stages all changes. Never stashes or force-pushes. Stops on Git errors.
+  - Stages modifications to tracked files only (`git add -u`). Untracked files must be added explicitly.
   - Refuses to leave unpublished commits behind on a protected branch.
-  - Commit hooks run unless -NoVerify is supplied.
+  - Commit hooks run unless -NoVerify is supplied (prints a warning when used).
   - -Force checks a clean working tree; it does not create an empty commit.
 #>
 param(
@@ -73,7 +73,7 @@ try {
   if ($Protected -contains $activeBranch -or $activeBranch -eq $MainBranch) {
     throw "Refusing to commit on protected branch '$activeBranch'."
   }
-  Invoke-Git add -A | Out-Host
+  Invoke-Git add -u | Out-Host
   & git diff --cached --quiet
   $diffExit = $LASTEXITCODE
   if ($diffExit -eq 0) {
@@ -83,7 +83,10 @@ try {
   if ($diffExit -ne 1) { throw "Unable to inspect staged changes (exit $diffExit)." }
 
   $commitArgs = @('commit', '-m', $Message)
-  if ($NoVerify) { $commitArgs += '--no-verify' }
+  if ($NoVerify) {
+    Write-Warning 'Skipping commit hooks because -NoVerify was supplied. Secret scanners will not run.'
+    $commitArgs += '--no-verify'
+  }
   Invoke-Git @commitArgs | Out-Host
   Invoke-Git push -u $Remote $newBranch | Out-Host
 
