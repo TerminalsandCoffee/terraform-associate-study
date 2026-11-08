@@ -396,6 +396,8 @@ Use separate resource or module blocks to select provider aliases statically. `f
 ### Example 2: Dynamic Security Groups
 
 ```hcl
+# Lab-only example. Do not apply 0.0.0.0/0 to SSH, RDP, or database ports.
+# Prefer a known office/VPN CIDR, or restrict 80/443 at an ALB security group.
 locals {
   security_groups = {
     web = {
